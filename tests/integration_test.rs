@@ -507,3 +507,248 @@ links = [
 
     Ok(())
 }
+
+// ============================================================================
+// Restore functionality integration tests
+// ============================================================================
+
+#[test]
+fn test_list_backups_empty() -> Result<(), Box<dyn std::error::Error>> {
+    // Test listing backups when no backups exist
+    let temp = assert_fs::TempDir::new()?;
+    let config_path = temp.child("config.toml");
+    let repo_dir = temp.child("dotfiles");
+    let backup_dir = temp.child("backups");
+
+    repo_dir.child(".bashrc").write_str("REPO BASHRC")?;
+
+    let config_content = format!(
+        r#"
+[settings]
+repo_dir = "{}"
+backup_dir = "{}"
+
+[profiles.test]
+links = [
+    {{ source = ".bashrc", target = "~/.bashrc" }}
+]
+"#,
+        repo_dir.path().display(),
+        backup_dir.path().display()
+    );
+    config_path.write_str(&config_content)?;
+
+    let manager = DotfileManager::new(config_path.path())?;
+    let backups = manager.list_backups()?;
+
+    assert_eq!(backups.len(), 0);
+    Ok(())
+}
+
+#[test]
+fn test_restore_workflow() -> Result<(), Box<dyn std::error::Error>> {
+    // Test full restore workflow: sync to create backup, list backups, restore
+    let temp = assert_fs::TempDir::new()?;
+    let config_path = temp.child("config.toml");
+    let repo_dir = temp.child("dotfiles");
+    let backup_dir = temp.child("backups");
+    let home_dir = temp.child("home");
+
+    // Create dotfiles
+    repo_dir.child(".bashrc").write_str("REPO BASHRC")?;
+
+    // Create existing file that will be backed up
+    home_dir.child(".bashrc").write_str("OLD BASHRC")?;
+
+    let config_content = format!(
+        r#"
+[settings]
+repo_dir = "{}"
+backup_dir = "{}"
+
+[profiles.test]
+links = [
+    {{ source = ".bashrc", target = "{}/.bashrc" }}
+]
+"#,
+        repo_dir.path().display(),
+        backup_dir.path().display(),
+        home_dir.path().display()
+    );
+    config_path.write_str(&config_content)?;
+
+    let manager = DotfileManager::new(config_path.path())?;
+
+    // Execute sync to create backup
+    manager.execute_sync("test", false)?;
+
+    // Verify symlink was created
+    assert!(home_dir.child(".bashrc").path().is_symlink());
+    assert_eq!(
+        fs::read_to_string(home_dir.child(".bashrc").path())?,
+        "REPO BASHRC"
+    );
+
+    // List backups
+    let backups = manager.list_backups()?;
+    assert_eq!(backups.len(), 1);
+    
+    let backup = &backups[0];
+    assert_eq!(backup.original_name, ".bashrc");
+    assert!(backup.backup_path.exists());
+
+    // Read backup content to verify
+    let backup_content = fs::read_to_string(&backup.backup_path)?;
+    assert_eq!(backup_content, "OLD BASHRC");
+
+    // Restore backup (dry run first)
+    let dry_run_logs = manager.restore_backup(backup, true)?;
+    assert!(dry_run_logs.iter().any(|s| s.contains("DRY RUN")));
+
+    // Symlink should still exist after dry run
+    assert!(home_dir.child(".bashrc").path().is_symlink());
+
+    // Restore backup for real
+    let restore_logs = manager.restore_backup(backup, false)?;
+    for log in &restore_logs {
+        println!("{}", log);
+    }
+    assert!(restore_logs.iter().any(|s| s.contains("Restoring backup")));
+    assert!(restore_logs.iter().any(|s| s.contains("RESTORE")));
+
+    // Check if it's still a symlink
+    println!("Is symlink after restore: {}", home_dir.child(".bashrc").path().is_symlink());
+    
+    // Verify the old content was restored
+    let content = fs::read_to_string(home_dir.child(".bashrc").path())?;
+    println!("Content after restore: {}", content);
+    assert_eq!(content, "OLD BASHRC");
+
+    // Verify backup file was removed
+    assert!(!backup.backup_path.exists());
+
+    Ok(())
+}
+
+#[test]
+fn test_delete_backup() -> Result<(), Box<dyn std::error::Error>> {
+    // Test deleting a backup file
+    let temp = assert_fs::TempDir::new()?;
+    let config_path = temp.child("config.toml");
+    let repo_dir = temp.child("dotfiles");
+    let backup_dir = temp.child("backups");
+    let home_dir = temp.child("home");
+
+    // Create dotfiles
+    repo_dir.child(".bashrc").write_str("REPO BASHRC")?;
+
+    // Create existing file that will be backed up
+    home_dir.child(".bashrc").write_str("OLD BASHRC")?;
+
+    let config_content = format!(
+        r#"
+[settings]
+repo_dir = "{}"
+backup_dir = "{}"
+
+[profiles.test]
+links = [
+    {{ source = ".bashrc", target = "{}/.bashrc" }}
+]
+"#,
+        repo_dir.path().display(),
+        backup_dir.path().display(),
+        home_dir.path().display()
+    );
+    config_path.write_str(&config_content)?;
+
+    let manager = DotfileManager::new(config_path.path())?;
+
+    // Execute sync to create backup
+    manager.execute_sync("test", false)?;
+
+    // List backups
+    let backups = manager.list_backups()?;
+    assert_eq!(backups.len(), 1);
+    
+    let backup = &backups[0];
+    assert!(backup.backup_path.exists());
+
+    // Delete backup
+    manager.delete_backup(backup)?;
+
+    // Verify backup was deleted
+    assert!(!backup.backup_path.exists());
+
+    // List backups again - should be empty
+    let backups = manager.list_backups()?;
+    assert_eq!(backups.len(), 0);
+
+    Ok(())
+}
+
+#[test]
+fn test_restore_backup_before_restore() -> Result<(), Box<dyn std::error::Error>> {
+    // Test that restoring creates a backup of the current file
+    let temp = assert_fs::TempDir::new()?;
+    let config_path = temp.child("config.toml");
+    let repo_dir = temp.child("dotfiles");
+    let backup_dir = temp.child("backups");
+    let home_dir = temp.child("home");
+
+    // Create dotfiles
+    repo_dir.child(".bashrc").write_str("REPO BASHRC")?;
+
+    // Create existing file that will be backed up
+    home_dir.child(".bashrc").write_str("OLD BASHRC")?;
+
+    let config_content = format!(
+        r#"
+[settings]
+repo_dir = "{}"
+backup_dir = "{}"
+
+[profiles.test]
+links = [
+    {{ source = ".bashrc", target = "{}/.bashrc" }}
+]
+"#,
+        repo_dir.path().display(),
+        backup_dir.path().display(),
+        home_dir.path().display()
+    );
+    config_path.write_str(&config_content)?;
+
+    let manager = DotfileManager::new(config_path.path())?;
+
+    // Execute sync to create backup
+    manager.execute_sync("test", false)?;
+
+    // Verify symlink was created
+    assert!(home_dir.child(".bashrc").path().is_symlink());
+
+    // Now modify the symlink target (simulate user changes)
+    fs::remove_file(home_dir.child(".bashrc").path())?;
+    home_dir.child(".bashrc").write_str("MODIFIED BASHRC")?;
+
+    // List backups - should have one from the sync
+    let backups = manager.list_backups()?;
+    assert_eq!(backups.len(), 1);
+    
+    let original_backup = &backups[0];
+
+    // Restore the original backup
+    manager.restore_backup(original_backup, false)?;
+
+    // Now there should be a new backup of "MODIFIED BASHRC"
+    let backups = manager.list_backups()?;
+    assert_eq!(backups.len(), 1);
+
+    // The current file should be the old content
+    assert_eq!(
+        fs::read_to_string(home_dir.child(".bashrc").path())?,
+        "OLD BASHRC"
+    );
+
+    Ok(())
+}
