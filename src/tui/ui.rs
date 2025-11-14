@@ -25,7 +25,7 @@ pub fn render(f: &mut Frame, app: &App) {
 
 fn render_help(f: &mut Frame, app: &App, area: Rect) {
     let text = if app.sync_in_progress {
-        Spans::from(vec![
+        Line::from(vec![
             Span::styled(
                 "SYNC IN PROGRESS...",
                 Style::default()
@@ -35,7 +35,7 @@ fn render_help(f: &mut Frame, app: &App, area: Rect) {
             Span::raw("Please wait."),
         ])
     } else {
-        Spans::from(vec![
+        Line::from(vec![
             Span::styled(
                 "  (q) ",
                 Style::default()
@@ -96,10 +96,10 @@ fn render_profile_list(f: &mut Frame, app: &App, area: Rect) {
 }
 
 fn render_log_output(f: &mut Frame, app: &App, area: Rect) {
-    let text: Vec<Spans> = app
+    let text: Vec<Line> = app
         .logs
         .iter()
-        .map(|log| Spans::from(log.as_str()))
+        .map(|log| Line::from(log.as_str()))
         .collect();
 
     let log_paragraph = Paragraph::new(text)

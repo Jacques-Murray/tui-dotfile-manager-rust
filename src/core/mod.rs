@@ -6,6 +6,6 @@ pub mod error;
 pub mod manager;
 
 // Publicly export the main components for the binary to use.
-pub use config::Config;
+#[allow(unused_imports)]
 pub use error::ManagerError;
 pub use manager::DotfileManager;

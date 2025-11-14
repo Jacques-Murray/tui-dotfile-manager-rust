@@ -17,9 +17,6 @@ pub enum ManagerError {
     #[error("File I/O error: {0}")]
     Io(#[from] io::Error),
 
-    #[error("Failed to expand home directory in path: {0}")]
-    PathExpand(String),
-
     #[error("Profile not found in configuration: {0}")]
     ProfileNotFound(String),
 }

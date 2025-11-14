@@ -4,6 +4,14 @@ name = "tui-dotfile-manager"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+name = "tui_dotfile_manager"
+path = "src/lib.rs"
+
+[[bin]]
+name = "tui-dotfile-manager"
+path = "src/main.rs"
+
 [dependencies]
 # TUI
 ratatui = { version = "0.26.3", features = ["crossterm"] }
@@ -19,7 +27,8 @@ thiserror = "1.0.61"
 
 # Utilities
 chrono = "0.4.38"
-shellexpand = "3.1.0"
+# FIX: Enable the "path" feature for tilde expansion
+shellexpand = { version = "3.1.1", features = ["path"] }
 
 [dev-dependencies]
 # For integration tests

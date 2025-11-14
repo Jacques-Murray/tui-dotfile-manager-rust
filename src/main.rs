@@ -11,13 +11,16 @@ use crossterm::{
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
-use ratatui::{prelude::*, widgets::*};
+use ratatui::{backend::CrosstermBackend, Terminal};
 use std::{
     io,
     path::PathBuf,
     sync::{mpsc, Arc},
 };
-use tui::{App, Event};
+use tui::{
+    app::App,
+    event::{self, Event},
+};
 
 fn main() -> Result<()> {
     // 1. Setup the DotfileManager
@@ -47,7 +50,10 @@ fn main() -> Result<()> {
     // 4. Create the App state
     let mut app = App::new(manager_arc, log_tx);
 
-    // 5. Run the main event loop
+    // 5. Start the event listener thread
+    event::run(event_tx)?;
+
+    // 6. Run the main event loop
     while !app.should_quit {
         // Draw the UI
         terminal.draw(|f| tui::render(f, &app))?;

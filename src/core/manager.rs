@@ -5,7 +5,8 @@ use super::config::Config;
 use super::error::ManagerError;
 use chrono::Local;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::io;
+use std::path::{Path, PathBuf}; // FIX: Import the 'io' module
 
 /// Encapsulates all dotfile management logic.
 /// It is stateless after initialization.
@@ -32,7 +33,7 @@ impl DotfileManager {
             .unwrap_or_else(|| Path::new("."))
             .to_path_buf();
 
-        // Resolve paths relative to teh config file or home dir
+        // Resolve paths relative to the config file or home dir
         let repo_path = Self::resolve_path(&config_dir, &config.settings.repo_dir)?;
         let backup_path = Self::resolve_path(&config_dir, &config.settings.backup_dir)?;
 
@@ -67,10 +68,7 @@ impl DotfileManager {
                 "--- Executing Sync for profile: {profile_name} ---"
             ));
             fs::create_dir_all(&self.backup_path)?;
-            logs.push(format!(
-                "Backup directory ensured at: {:?}",
-                self.backup_path
-            ));
+            logs.push(format!("Backup directory ensured: {:?}", self.backup_path));
         }
 
         let profile = self
@@ -94,7 +92,7 @@ impl DotfileManager {
 
             if !source.exists() {
                 logs.push(format!(
-                    "   [WARN] Source file does not exist: {}",
+                    "  [WARN] Source file does not exist: {}",
                     source.display()
                 ));
                 continue;
@@ -115,6 +113,7 @@ impl DotfileManager {
         dry_run: bool,
         logs: &mut Vec<String>,
     ) -> Result<(), io::Error> {
+        // This type is now found
         let mut needs_link = true;
 
         // Check if target exists
@@ -123,13 +122,13 @@ impl DotfileManager {
                 let existing_link = fs::read_link(target)?;
                 if existing_link == source {
                     logs.push(format!(
-                        "   [SKIP] Link already correct: {}",
+                        "  [SKIP] Link already correct: {}",
                         target.display()
                     ));
                     needs_link = false;
                 } else {
                     logs.push(format!(
-                        "   [BACKUP] Removing incorrect symlink: {}",
+                        "  [BACKUP] Removing incorrect symlink: {}",
                         target.display()
                     ));
                     if !dry_run {
@@ -147,7 +146,7 @@ impl DotfileManager {
                 let backup_path = self.backup_path.join(backup_name);
 
                 logs.push(format!(
-                    "   [BACKUP] Moving existing file: {} -> {}",
+                    "  [BACKUP] Moving existing file: {} -> {}",
                     target.display(),
                     backup_path.display()
                 ));
@@ -160,7 +159,7 @@ impl DotfileManager {
         // Create the link if needed
         if needs_link {
             logs.push(format!(
-                "   [LINK] Creating symlink: {} -> {}",
+                "  [LINK] Creating symlink: {} -> {}",
                 source.display(),
                 target.display()
             ));
@@ -171,7 +170,7 @@ impl DotfileManager {
                         fs::create_dir_all(parent)?;
                     }
                 }
-                // Use platform-specific symlink creation
+                // Use platform-specific symlink functions
                 self.create_symlink(source, target)?;
             }
         }
@@ -191,13 +190,13 @@ impl DotfileManager {
     /// Creates a platform-aware symlink (Unix).
     #[cfg(not(windows))]
     fn create_symlink(&self, source: &Path, target: &Path) -> Result<(), io::Error> {
+        // This type is now found
         std::os::unix::fs::symlink(source, target)
     }
 
     /// Helper to expand '~' and resolve paths.
     fn resolve_path(base: &Path, p: &Path) -> Result<PathBuf, ManagerError> {
-        let expanded =
-            shellexpand::path::tilde(p).map_err(|e| ManagerError::PathExpand(e.to_string()))?;
+        let expanded = shellexpand::path::tilde(p);
 
         if expanded.is_absolute() {
             Ok(expanded.to_path_buf())
