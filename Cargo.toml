@@ -1,0 +1,27 @@
+# Author: Jacques Murray
+[package]
+name = "tui-dotfile-manager"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# TUI
+ratatui = { version = "0.26.3", features = ["crossterm"] }
+crossterm = "0.27.0"
+
+# Config and Serialization
+serde = { version = "1.0.203", features = ["derive"] }
+toml = "0.8.14"
+
+# Error Handling
+anyhow = "1.0.86"
+thiserror = "1.0.61"
+
+# Utilities
+chrono = "0.4.38"
+shellexpand = "3.1.0"
+
+[dev-dependencies]
+# For integration tests
+tempfile = "3.10.1"
+assert_fs = "1.1.1"
