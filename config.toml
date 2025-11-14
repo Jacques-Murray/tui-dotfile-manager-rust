@@ -1,0 +1,24 @@
+# Author: Jacques Murray
+#
+# Configuration file for the TUI Dotfile Manager
+# 'source' paths are relative to 'repo_dir'.
+# 'target' paths are absolute (use '~' for home).
+
+[settings]
+repo_dir = "dotfiles"
+backup_dir = "~/.dotfile_backups"
+
+[profiles]
+
+[profiles.personal]
+links = [
+  { source = ".bashrc", target = "~/.bashrc" },
+  { source = ".gitconfig_personal", target = "~/.gitconfig" },
+  { source = "nvim/init.vim", target = "~/.config/nvim/init.vim" },
+]
+
+[profiles.work]
+links = [
+  { source = ".bashrc", target = "~/.bashrc" },
+  { source = ".gitconfig_work", target = "~/.gitconfig" },
+]

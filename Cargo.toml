@@ -1,0 +1,36 @@
+# Author: Jacques Murray
+[package]
+name = "tui-dotfile-manager"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "tui_dotfile_manager"
+path = "src/lib.rs"
+
+[[bin]]
+name = "tui-dotfile-manager"
+path = "src/main.rs"
+
+[dependencies]
+# TUI
+ratatui = { version = "0.26.3", features = ["crossterm"] }
+crossterm = "0.27.0"
+
+# Config and Serialization
+serde = { version = "1.0.203", features = ["derive"] }
+toml = "0.8.14"
+
+# Error Handling
+anyhow = "1.0.86"
+thiserror = "1.0.61"
+
+# Utilities
+chrono = "0.4.38"
+# FIX: Enable the "path" feature for tilde expansion
+shellexpand = { version = "3.1.1", features = ["path"] }
+
+[dev-dependencies]
+# For integration tests
+tempfile = "3.10.1"
+assert_fs = "1.1.1"
