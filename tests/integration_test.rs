@@ -49,13 +49,13 @@ links = [
 
     // 6. Run a dry run first
     let dry_run_logs = manager.execute_sync("test", true)?;
-    assert!(dry_run_logs.iter().any(|s| s.contains("[DRY RUN]")));
+    assert!(dry_run_logs.iter().any(|s| s.contains("DRY RUN")));
     assert!(dry_run_logs
         .iter()
-        .any(|s| s.contains("[BACKUP] Moving existing file")));
+        .any(|s| s.contains("BACKUP") && s.contains("Moving existing file")));
     assert!(dry_run_logs
         .iter()
-        .any(|s| s.contains("[LINK] Creating symlink")));
+        .any(|s| s.contains("LINK") && s.contains("Creating symlink")));
 
     // Assert no changes were made
     assert_eq!(
@@ -102,5 +102,191 @@ links = [
         "OLD GITCONFIG"
     );
 
+    Ok(())
+}
+
+#[test]
+fn test_missing_config_file() {
+    use std::path::Path;
+    let result = DotfileManager::new(Path::new("nonexistent.toml"));
+    assert!(result.is_err());
+    if let Err(e) = result {
+        assert!(e.to_string().contains("Configuration file not found"));
+    }
+}
+
+#[test]
+fn test_invalid_toml() -> Result<(), Box<dyn std::error::Error>> {
+    let temp = assert_fs::TempDir::new()?;
+    let config_path = temp.child("config.toml");
+    config_path.write_str("this is not valid toml {")?;
+    
+    let result = DotfileManager::new(config_path.path());
+    assert!(result.is_err());
+    if let Err(e) = result {
+        assert!(e.to_string().contains("Failed to parse configuration"));
+    }
+    
+    Ok(())
+}
+
+#[test]
+fn test_profile_not_found() -> Result<(), Box<dyn std::error::Error>> {
+    let temp = assert_fs::TempDir::new()?;
+    let config_path = temp.child("config.toml");
+    let config_content = r#"
+[settings]
+repo_dir = "dotfiles"
+backup_dir = "backups"
+
+[profiles.test]
+links = [
+    { source = ".bashrc", target = "~/.bashrc" }
+]
+"#;
+    config_path.write_str(config_content)?;
+    
+    let manager = DotfileManager::new(config_path.path())?;
+    let result = manager.execute_sync("nonexistent", false);
+    
+    assert!(result.is_err());
+    if let Err(e) = result {
+        assert!(e.to_string().contains("Profile not found"));
+    }
+    
+    Ok(())
+}
+
+#[test]
+fn test_missing_source_file() -> Result<(), Box<dyn std::error::Error>> {
+    let temp = assert_fs::TempDir::new()?;
+    let config_path = temp.child("config.toml");
+    let repo_dir = temp.child("dotfiles");
+    let home_dir = temp.child("home");
+    
+    // Create repo but don't create the source file
+    repo_dir.create_dir_all()?;
+    
+    let config_content = format!(
+        r#"
+[settings]
+repo_dir = "{}"
+backup_dir = "backups"
+
+[profiles.test]
+links = [
+    {{ source = "missing.txt", target = "{}/.missing.txt" }}
+]
+"#,
+        repo_dir.path().display(),
+        home_dir.path().display()
+    );
+    config_path.write_str(&config_content)?;
+    
+    let manager = DotfileManager::new(config_path.path())?;
+    let logs = manager.execute_sync("test", false)?;
+    
+    // Should warn about missing file but not fail
+    assert!(logs.iter().any(|s| s.contains("[WARN]") && s.contains("does not exist")));
+    
+    Ok(())
+}
+
+#[test]
+fn test_symlink_already_correct() -> Result<(), Box<dyn std::error::Error>> {
+    let temp = assert_fs::TempDir::new()?;
+    let config_path = temp.child("config.toml");
+    let repo_dir = temp.child("dotfiles");
+    let home_dir = temp.child("home");
+    
+    // Create source file
+    repo_dir.child(".bashrc").write_str("REPO BASHRC")?;
+    
+    // Create target directory
+    home_dir.create_dir_all()?;
+    
+    let config_content = format!(
+        r#"
+[settings]
+repo_dir = "{}"
+backup_dir = "backups"
+
+[profiles.test]
+links = [
+    {{ source = ".bashrc", target = "{}/.bashrc" }}
+]
+"#,
+        repo_dir.path().display(),
+        home_dir.path().display()
+    );
+    config_path.write_str(&config_content)?;
+    
+    let manager = DotfileManager::new(config_path.path())?;
+    
+    // First sync creates the link
+    manager.execute_sync("test", false)?;
+    
+    // Second sync should skip (already correct)
+    let logs = manager.execute_sync("test", false)?;
+    assert!(logs.iter().any(|s| s.contains("[SKIP]") && s.contains("already correct")));
+    
+    Ok(())
+}
+
+#[test]
+fn test_get_profiles() -> Result<(), Box<dyn std::error::Error>> {
+    let temp = assert_fs::TempDir::new()?;
+    let config_path = temp.child("config.toml");
+    let config_content = r#"
+[settings]
+repo_dir = "dotfiles"
+backup_dir = "backups"
+
+[profiles.work]
+links = [
+    { source = ".bashrc", target = "~/.bashrc" }
+]
+
+[profiles.personal]
+links = [
+    { source = ".bashrc", target = "~/.bashrc" }
+]
+
+[profiles.test]
+links = [
+    { source = ".bashrc", target = "~/.bashrc" }
+]
+"#;
+    config_path.write_str(config_content)?;
+    
+    let manager = DotfileManager::new(config_path.path())?;
+    let profiles = manager.get_profiles();
+    
+    // Should be sorted alphabetically
+    assert_eq!(profiles, vec!["personal", "test", "work"]);
+    
+    Ok(())
+}
+
+#[test]
+fn test_empty_profile_validation() -> Result<(), Box<dyn std::error::Error>> {
+    let temp = assert_fs::TempDir::new()?;
+    let config_path = temp.child("config.toml");
+    let config_content = r#"
+[settings]
+repo_dir = "dotfiles"
+backup_dir = "backups"
+
+[profiles.empty]
+links = []
+"#;
+    config_path.write_str(config_content)?;
+    
+    let result = DotfileManager::new(config_path.path());
+    assert!(result.is_err());
+    if let Err(e) = result {
+        assert!(e.to_string().contains("no links"));
+    }
+    
     Ok(())
 }

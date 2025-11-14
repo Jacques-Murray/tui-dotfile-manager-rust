@@ -7,14 +7,27 @@ use ratatui::{
     widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap},
 };
 
+// UI Layout Constants
+/// Height of the help section at the top
+const HELP_HEIGHT: u16 = 3;
+/// Minimum height for the profile list section
+const MIN_PROFILE_HEIGHT: u16 = 5;
+/// Percentage of remaining space allocated to logs
+const LOG_PERCENTAGE: u16 = 70;
+
 /// Renders the entire TUI frame.
+/// 
+/// The UI is divided into three sections:
+/// 1. Help bar showing available commands
+/// 2. Profile list for selection
+/// 3. Log output showing sync operations and messages
 pub fn render(f: &mut Frame, app: &App) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(3),      // Help
-            Constraint::Min(5),         // Profiles
-            Constraint::Percentage(70), // Logs
+            Constraint::Length(HELP_HEIGHT),
+            Constraint::Min(MIN_PROFILE_HEIGHT),
+            Constraint::Percentage(LOG_PERCENTAGE),
         ])
         .split(f.size());
 
@@ -23,6 +36,9 @@ pub fn render(f: &mut Frame, app: &App) {
     render_log_output(f, app, chunks[2]);
 }
 
+/// Renders the help bar showing available key bindings.
+/// 
+/// Displays different content when a sync is in progress.
 fn render_help(f: &mut Frame, app: &App, area: Rect) {
     let text = if app.sync_in_progress {
         Line::from(vec![
@@ -71,6 +87,7 @@ fn render_help(f: &mut Frame, app: &App, area: Rect) {
     f.render_widget(help, area);
 }
 
+/// Renders the profile list with the current selection highlighted.
 fn render_profile_list(f: &mut Frame, app: &App, area: Rect) {
     let items: Vec<ListItem> = app
         .profiles
@@ -95,6 +112,9 @@ fn render_profile_list(f: &mut Frame, app: &App, area: Rect) {
     f.render_stateful_widget(list, area, &mut state);
 }
 
+/// Renders the log output panel with auto-scrolling.
+/// 
+/// The log automatically scrolls to show the most recent messages.
 fn render_log_output(f: &mut Frame, app: &App, area: Rect) {
     let text: Vec<Line> = app
         .logs

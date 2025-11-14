@@ -67,6 +67,10 @@ fn main() -> Result<()> {
         match event_rx.recv()? {
             Event::Key(key) => app.on_key(key),
             Event::Tick => { /* We could add tick-based logic here */ }
+            Event::Error(err) => {
+                // Log the error and continue - the event thread has exited
+                app.on_log(format!("[ERROR] Event thread: {}", err));
+            }
         }
     }
 
