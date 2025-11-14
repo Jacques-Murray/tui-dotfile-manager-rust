@@ -1,0 +1,9 @@
+# Rust
+/target
+Cargo.lock
+
+# OS-specific
+.DS_Store
+
+# Backups
+.dotfile_backups/
