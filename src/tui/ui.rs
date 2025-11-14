@@ -165,7 +165,11 @@ fn render_restore_help(f: &mut Frame, app: &App, area: Rect) {
         ])
     };
 
-    let help = Paragraph::new(text).block(Block::default().title(" Help - Restore Mode ").borders(Borders::ALL));
+    let help = Paragraph::new(text).block(
+        Block::default()
+            .title(" Help - Restore Mode ")
+            .borders(Borders::ALL),
+    );
     f.render_widget(help, area);
 }
 

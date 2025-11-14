@@ -43,32 +43,32 @@ impl BackupEntry {
     pub fn parse_backup_filename(filename: &str) -> Option<(String, DateTime<Local>)> {
         // Expected format: <original_name>_<YYYYMMDD>_<HHMMSS>.<microseconds>
         // Example: .bashrc_20241114_143052.123456
-        
+
         // Find the last underscore before the time component
         let parts: Vec<&str> = filename.rsplitn(2, '_').collect();
         if parts.len() != 2 {
             return None;
         }
-        
+
         let time_part = parts[0]; // "143052.123456"
         let remaining = parts[1]; // ".bashrc_20241114"
-        
+
         // Find the second-to-last underscore to separate date
         let parts2: Vec<&str> = remaining.rsplitn(2, '_').collect();
         if parts2.len() != 2 {
             return None;
         }
-        
+
         let date_part = parts2[0]; // "20241114"
         let original_name = parts2[1]; // ".bashrc"
-        
+
         // Parse timestamp: date_part + time_part
         let timestamp_str = format!("{}_{}", date_part, time_part);
-        
+
         // Parse format: YYYYMMDD_HHMMSS.microseconds
         let dt = NaiveDateTime::parse_from_str(&timestamp_str, "%Y%m%d_%H%M%S%.6f").ok()?;
         let local_dt = Local.from_local_datetime(&dt).single()?;
-        
+
         Some((original_name.to_string(), local_dt))
     }
 
@@ -80,17 +80,18 @@ impl BackupEntry {
     ///
     /// # Returns
     /// Some(BackupEntry) if the file is a valid backup, None otherwise
+    #[allow(dead_code)]
     pub fn from_path(backup_path: &Path, target_base: &Path) -> Option<Self> {
         let filename = backup_path.file_name()?.to_str()?;
         let (original_name, timestamp) = Self::parse_backup_filename(filename)?;
-        
+
         // Get file metadata
         let metadata = fs::metadata(backup_path).ok()?;
         let file_size = metadata.len();
-        
+
         // Construct expected target path
         let target_path = target_base.join(&original_name);
-        
+
         Some(BackupEntry {
             original_name,
             timestamp,
@@ -139,7 +140,7 @@ mod tests {
     fn test_parse_backup_filename_valid() {
         let filename = ".bashrc_20241114_143052.123456";
         let result = BackupEntry::parse_backup_filename(filename);
-        
+
         assert!(result.is_some());
         let (name, _timestamp) = result.unwrap();
         assert_eq!(name, ".bashrc");
@@ -149,7 +150,7 @@ mod tests {
     fn test_parse_backup_filename_with_underscores() {
         let filename = "my_config_file_20241114_143052.123456";
         let result = BackupEntry::parse_backup_filename(filename);
-        
+
         assert!(result.is_some());
         let (name, _timestamp) = result.unwrap();
         assert_eq!(name, "my_config_file");
@@ -163,7 +164,7 @@ mod tests {
             "no_timestamp",
             ".bashrc_20241114",
         ];
-        
+
         for filename in invalid_filenames {
             assert!(
                 BackupEntry::parse_backup_filename(filename).is_none(),
@@ -182,7 +183,7 @@ mod tests {
             target_path: PathBuf::from("/tmp/target"),
             file_size: 1024,
         };
-        
+
         assert_eq!(entry.format_size(), "1.0 KB");
     }
 }

@@ -205,26 +205,23 @@ impl App {
         self.mode = AppMode::Restore;
         self.logs.push_back("---".to_string());
         self.logs.push_back("Entering Restore Mode...".to_string());
-        
+
         let manager = Arc::clone(&self.manager);
         let log_tx = self.log_tx.clone();
-        
+
         // Spawn a thread to list backups
-        thread::spawn(move || {
-            match manager.list_backups() {
-                Ok(backups) => {
-                    log_tx
-                        .send(WorkerMessage::BackupsListed(backups))
-                        .ok();
-                }
-                Err(e) => {
-                    log_tx
-                        .send(WorkerMessage::Log(format!("[ERROR] Failed to list backups: {}", e)))
-                        .ok();
-                    log_tx
-                        .send(WorkerMessage::BackupsListed(Vec::new()))
-                        .ok();
-                }
+        thread::spawn(move || match manager.list_backups() {
+            Ok(backups) => {
+                log_tx.send(WorkerMessage::BackupsListed(backups)).ok();
+            }
+            Err(e) => {
+                log_tx
+                    .send(WorkerMessage::Log(format!(
+                        "[ERROR] Failed to list backups: {}",
+                        e
+                    )))
+                    .ok();
+                log_tx.send(WorkerMessage::BackupsListed(Vec::new())).ok();
             }
         });
     }
@@ -362,10 +359,8 @@ impl App {
             let log_tx = self.log_tx.clone();
 
             self.logs.push_back("---".to_string());
-            self.logs.push_back(format!(
-                "Deleting backup: {}",
-                backup.backup_path.display()
-            ));
+            self.logs
+                .push_back(format!("Deleting backup: {}", backup.backup_path.display()));
 
             // Spawn the blocking I/O in a separate thread
             thread::spawn(move || {
@@ -377,7 +372,10 @@ impl App {
                     }
                     Err(e) => {
                         log_tx
-                            .send(WorkerMessage::Log(format!("[ERROR] Failed to delete backup: {}", e)))
+                            .send(WorkerMessage::Log(format!(
+                                "[ERROR] Failed to delete backup: {}",
+                                e
+                            )))
                             .ok();
                     }
                 }

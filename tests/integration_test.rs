@@ -592,7 +592,7 @@ links = [
     // List backups
     let backups = manager.list_backups()?;
     assert_eq!(backups.len(), 1);
-    
+
     let backup = &backups[0];
     assert_eq!(backup.original_name, ".bashrc");
     assert!(backup.backup_path.exists());
@@ -665,7 +665,7 @@ links = [
     // List backups
     let backups = manager.list_backups()?;
     assert_eq!(backups.len(), 1);
-    
+
     let backup = &backups[0];
     assert!(backup.backup_path.exists());
 
@@ -729,7 +729,7 @@ links = [
     // List backups - should have one from the sync
     let backups = manager.list_backups()?;
     assert_eq!(backups.len(), 1);
-    
+
     let original_backup = &backups[0];
 
     // Restore the original backup

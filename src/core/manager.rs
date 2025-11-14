@@ -284,27 +284,30 @@ impl DotfileManager {
         }
 
         let mut backups = Vec::new();
-        
+
         // Read all files from backup directory
         for entry in fs::read_dir(&self.backup_path)? {
             let entry = entry?;
             let path = entry.path();
-            
+
             // Skip directories, only process files
             if !path.is_file() {
                 continue;
             }
-            
+
             // Parse backup filename
             if let Some(filename_str) = path.file_name().and_then(|s| s.to_str()) {
-                if let Some((original_name, timestamp)) = BackupEntry::parse_backup_filename(filename_str) {
+                if let Some((original_name, timestamp)) =
+                    BackupEntry::parse_backup_filename(filename_str)
+                {
                     // Get file metadata
                     if let Ok(metadata) = fs::metadata(&path) {
                         // Find matching target from config by looking through all profiles
                         let mut target_path = None;
                         for profile in self.config.profiles.values() {
                             for link in &profile.links {
-                                let link_target = Self::resolve_path(&self.config_dir, &link.target);
+                                let link_target =
+                                    Self::resolve_path(&self.config_dir, &link.target);
                                 if let Some(target_filename) = link_target.file_name() {
                                     if target_filename.to_string_lossy() == original_name {
                                         target_path = Some(link_target);
@@ -316,13 +319,13 @@ impl DotfileManager {
                                 break;
                             }
                         }
-                        
+
                         // If no matching config entry, default to home directory
                         let target_path = target_path.unwrap_or_else(|| {
                             let home_dir = shellexpand::path::tilde("~");
                             home_dir.join(&original_name)
                         });
-                        
+
                         backups.push(BackupEntry {
                             original_name,
                             timestamp,
@@ -334,10 +337,10 @@ impl DotfileManager {
                 }
             }
         }
-        
+
         // Sort by timestamp, newest first
         backups.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
-        
+
         Ok(backups)
     }
 
@@ -371,14 +374,8 @@ impl DotfileManager {
             ));
         }
 
-        logs.push(format!(
-            "Backup file: {}",
-            backup.backup_path.display()
-        ));
-        logs.push(format!(
-            "Target location: {}",
-            backup.target_path.display()
-        ));
+        logs.push(format!("Backup file: {}", backup.backup_path.display()));
+        logs.push(format!("Target location: {}", backup.target_path.display()));
 
         // Check if backup file still exists
         if !backup.backup_path.exists() {
@@ -401,7 +398,10 @@ impl DotfileManager {
                     let file_name = backup.target_path.file_name().ok_or_else(|| {
                         io::Error::new(
                             io::ErrorKind::InvalidInput,
-                            format!("Target path has no filename: {}", backup.target_path.display()),
+                            format!(
+                                "Target path has no filename: {}",
+                                backup.target_path.display()
+                            ),
                         )
                     })?;
                     let backup_name = format!("{}_{}", file_name.to_string_lossy(), ts);
