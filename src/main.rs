@@ -18,7 +18,7 @@ use std::{
     sync::{mpsc, Arc},
 };
 use tui::{
-    app::App,
+    app::{App, WorkerMessage},
     event::{self, Event},
 };
 
@@ -38,12 +38,12 @@ fn main() -> Result<()> {
     // event_tx/event_rx: For TUI events (keys, ticks)
     // log_tx/log_rx: For logs from the sync worker thread
     let (event_tx, event_rx) = mpsc::channel();
-    let (log_tx, log_rx) = mpsc::channel();
+    let (log_tx, log_rx) = mpsc::channel::<WorkerMessage>();
 
     // 3. Setup the TUI
     enable_raw_mode()?;
     let mut stdout = io::stdout();
-    execute!(stdout, EnterAlternateScreen, DisableMouseCapture)?;
+    execute!(stdout, EnterAlternateScreen, crossterm::event::EnableMouseCapture)?;
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
@@ -59,8 +59,8 @@ fn main() -> Result<()> {
         terminal.draw(|f| tui::render(f, &app))?;
 
         // Check for new logs from the sync thread (non-blocking)
-        if let Ok(log) = log_rx.try_recv() {
-            app.on_log(log);
+        if let Ok(msg) = log_rx.try_recv() {
+            app.on_log(msg);
         }
 
         // Wait for the next TUI event (blocking)
@@ -69,7 +69,7 @@ fn main() -> Result<()> {
             Event::Tick => { /* We could add tick-based logic here */ }
             Event::Error(err) => {
                 // Log the error and continue - the event thread has exited
-                app.on_log(format!("[ERROR] Event thread: {}", err));
+                app.on_log(WorkerMessage::Log(format!("[ERROR] Event thread: {}", err)));
             }
         }
     }

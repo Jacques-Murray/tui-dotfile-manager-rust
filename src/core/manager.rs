@@ -39,8 +39,10 @@ impl DotfileManager {
     /// use std::path::Path;
     /// use tui_dotfile_manager::DotfileManager;
     /// 
-    /// let manager = DotfileManager::new(Path::new("config.toml"))?;
-    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// fn main() -> Result<(), Box<dyn std::error::Error>> {
+    ///     let manager = DotfileManager::new(Path::new("config.toml"))?;
+    ///     Ok(())
+    /// }
     /// ```
     pub fn new(config_path: &Path) -> Result<Self, ManagerError> {
         if !config_path.exists() {
@@ -52,10 +54,7 @@ impl DotfileManager {
         
         // Validate configuration
         if let Err(e) = config.validate() {
-            return Err(ManagerError::Io(io::Error::new(
-                io::ErrorKind::InvalidData,
-                e
-            )));
+            return Err(ManagerError::ConfigValidation(e));
         }
 
         let config_dir = config_path
@@ -64,8 +63,8 @@ impl DotfileManager {
             .to_path_buf();
 
         // Resolve paths relative to the config file or home dir
-        let repo_path = Self::resolve_path(&config_dir, &config.settings.repo_dir)?;
-        let backup_path = Self::resolve_path(&config_dir, &config.settings.backup_dir)?;
+        let repo_path = Self::resolve_path(&config_dir, &config.settings.repo_dir);
+        let backup_path = Self::resolve_path(&config_dir, &config.settings.backup_dir);
 
         Ok(Self {
             config,
@@ -121,8 +120,8 @@ impl DotfileManager {
             .ok_or_else(|| ManagerError::ProfileNotFound(profile_name.to_string()))?;
 
         for link in &profile.links {
-            let source = Self::resolve_path(&self.repo_path, &link.source)?;
-            let target = Self::resolve_path(&self.config_dir, &link.target)?;
+            let source = Self::resolve_path(&self.repo_path, &link.source);
+            let target = Self::resolve_path(&self.config_dir, &link.target);
 
             logs.push(format!(
                 "Processing: {} -> {}",
@@ -162,42 +161,49 @@ impl DotfileManager {
     ) -> Result<(), io::Error> {
         let mut needs_link = true;
 
-        // Check if target exists - use metadata directly to avoid TOCTOU
-        if let Ok(metadata) = target.symlink_metadata() {
-            if metadata.is_symlink() {
-                let existing_link = fs::read_link(target)?;
-                if existing_link == source {
-                    logs.push(format!(
-                        "  [SKIP] Link already correct: {}",
-                        target.display()
-                    ));
-                    needs_link = false;
-                } else {
-                    logs.push(format!(
-                        "  [BACKUP] Removing incorrect symlink: {}",
-                        target.display()
-                    ));
-                    if !dry_run {
-                        fs::remove_file(target)?;
+        // Attempt to handle existing target to avoid TOCTOU issues
+        if target.exists() {
+            match fs::read_link(target) {
+                Ok(existing_link) => {
+                    if existing_link == source {
+                        logs.push(format!(
+                            "  [SKIP] Link already correct: {}",
+                            target.display()
+                        ));
+                        needs_link = false;
+                    } else {
+                        logs.push(format!(
+                            "  [BACKUP] Removing incorrect symlink: {}",
+                            target.display()
+                        ));
+                        if !dry_run {
+                            // Ignore error if file is already gone
+                            let _ = fs::remove_file(target);
+                        }
                     }
                 }
-            } else {
-                // It's a real file or directory - include microseconds to prevent collisions
-                let ts = Local::now().format("%Y%m%d_%H%M%S%.6f");
-                let backup_name = format!(
-                    "{}_{}",
-                    target.file_name().unwrap_or_default().to_string_lossy(),
-                    ts
-                );
-                let backup_path = self.backup_path.join(backup_name);
+                Err(_) => {
+                    // Not a symlink, treat as file or directory
+                    let ts = Local::now().format("%Y%m%d_%H%M%S%.6f");
+                    let file_name = target.file_name().ok_or_else(|| {
+                        io::Error::new(io::ErrorKind::InvalidInput, format!("Target path has no filename: {}", target.display()))
+                    })?;
+                    let backup_name = format!(
+                        "{}_{}",
+                        file_name.to_string_lossy(),
+                        ts
+                    );
+                    let backup_path = self.backup_path.join(backup_name);
 
-                logs.push(format!(
-                    "  [BACKUP] Moving existing file: {} -> {}",
-                    target.display(),
-                    backup_path.display()
-                ));
-                if !dry_run {
-                    fs::rename(target, backup_path)?;
+                    logs.push(format!(
+                        "  [BACKUP] Moving existing file: {} -> {}",
+                        target.display(),
+                        backup_path.display()
+                    ));
+                    if !dry_run {
+                        // Ignore error if file is already gone
+                        let _ = fs::rename(target, backup_path);
+                    }
                 }
             }
         }
@@ -253,13 +259,13 @@ impl DotfileManager {
     /// - Expands ~ to the user's home directory
     /// - If the path is absolute (after expansion), returns it as-is
     /// - If relative, joins it with the base directory
-    fn resolve_path(base: &Path, p: &Path) -> Result<PathBuf, ManagerError> {
+    fn resolve_path(base: &Path, p: &Path) -> PathBuf {
         let expanded = shellexpand::path::tilde(p);
 
         if expanded.is_absolute() {
-            Ok(expanded.to_path_buf())
+            expanded.to_path_buf()
         } else {
-            Ok(base.join(expanded))
+            base.join(expanded)
         }
     }
 }

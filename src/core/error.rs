@@ -20,6 +20,9 @@ pub enum ManagerError {
     #[error("File I/O error: {0}")]
     Io(#[from] io::Error),
 
+    #[error("Invalid configuration: {0}")]
+    ConfigValidation(String),
+
     #[error("Profile not found in configuration: {0}")]
     ProfileNotFound(String),
 }

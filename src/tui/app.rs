@@ -3,12 +3,19 @@
 
 use crate::core::DotfileManager;
 use crossterm::event::KeyCode;
+use std::collections::VecDeque;
 use std::sync::{mpsc, Arc};
 use std::thread;
 
 /// Maximum number of log messages to keep in memory.
 /// Older messages are removed to prevent unbounded memory growth.
 const MAX_LOG_MESSAGES: usize = 1000;
+
+/// Messages sent from worker threads to the main UI thread.
+pub enum WorkerMessage {
+    Log(String),
+    SyncComplete,
+}
 
 /// Represents the TUI's state and logic.
 /// 
@@ -19,10 +26,10 @@ pub struct App {
     pub manager: Arc<DotfileManager>,
     pub profiles: Vec<String>,
     pub selected_profile: Option<usize>,
-    pub logs: Vec<String>,
+    pub logs: VecDeque<String>,
     pub should_quit: bool,
     pub sync_in_progress: bool,
-    log_tx: mpsc::Sender<String>,
+    log_tx: mpsc::Sender<WorkerMessage>,
 }
 
 impl App {
@@ -34,7 +41,7 @@ impl App {
     /// 
     /// # Returns
     /// A new App instance with initial welcome messages and the first profile selected.
-    pub fn new(manager: Arc<DotfileManager>, log_tx: mpsc::Sender<String>) -> Self {
+    pub fn new(manager: Arc<DotfileManager>, log_tx: mpsc::Sender<WorkerMessage>) -> Self {
         let profiles = manager.get_profiles();
         let selected_profile = if profiles.is_empty() { None } else { Some(0) };
 
@@ -42,11 +49,11 @@ impl App {
             manager,
             profiles,
             selected_profile,
-            logs: vec![
+            logs: VecDeque::from([
                 "Welcome to the TUI Dotfile Manager!".to_string(),
                 "Use 'j'/'k' or Arrow Up/Down to select a profile.".to_string(),
                 "'s' = Sync, 'd' = Dry Run, 'q' = Quit.".to_string(),
-            ],
+            ]),
             should_quit: false,
             sync_in_progress: false,
             log_tx,
@@ -128,8 +135,8 @@ impl App {
             let manager = Arc::clone(&self.manager);
             let log_tx = self.log_tx.clone();
 
-            self.logs.push("---".to_string());
-            self.logs.push(format!(
+            self.logs.push_back("---".to_string());
+            self.logs.push_back(format!(
                 "Starting {}...",
                 if dry_run { "Dry Run" } else { "Sync" }
             ));
@@ -139,36 +146,39 @@ impl App {
                 match manager.execute_sync(&profile_name, dry_run) {
                     Ok(logs) => {
                         for log in logs {
-                            log_tx.send(log).ok();
+                            log_tx.send(WorkerMessage::Log(log)).ok();
                         }
                     }
                     Err(e) => {
-                        log_tx.send(format!("[FATAL ERROR] {}", e)).ok();
+                        log_tx.send(WorkerMessage::Log(format!("[FATAL ERROR] {}", e))).ok();
                     }
                 }
                 // Send a signal that the thread is done
-                log_tx.send("---SYNC_COMPLETE---".to_string()).ok();
+                log_tx.send(WorkerMessage::SyncComplete).ok();
             });
         } else {
-            self.logs.push("[ERROR] No profile selected.".to_string());
+            self.logs.push_back("[ERROR] No profile selected.".to_string());
         }
     }
 
-    /// Called when the app receives a new log message.
+    /// Called when the app receives a new message from a worker thread.
     /// 
     /// # Arguments
-    /// * `log` - The log message received from a worker thread
+    /// * `msg` - The message received from a worker thread
     /// 
-    /// Special handling for "---SYNC_COMPLETE---" marker to reset sync status.
+    /// Handles log messages and sync completion signals.
     /// Implements log rotation to prevent unbounded memory growth.
-    pub fn on_log(&mut self, log: String) {
-        if log == "---SYNC_COMPLETE---" {
-            self.sync_in_progress = false;
-        } else {
-            self.logs.push(log);
-            // Implement log rotation to limit memory usage
-            if self.logs.len() > MAX_LOG_MESSAGES {
-                self.logs.drain(0..self.logs.len() - MAX_LOG_MESSAGES);
+    pub fn on_log(&mut self, msg: WorkerMessage) {
+        match msg {
+            WorkerMessage::Log(log) => {
+                self.logs.push_back(log);
+                // Implement log rotation to limit memory usage
+                while self.logs.len() > MAX_LOG_MESSAGES {
+                    self.logs.pop_front();
+                }
+            }
+            WorkerMessage::SyncComplete => {
+                self.sync_in_progress = false;
             }
         }
     }

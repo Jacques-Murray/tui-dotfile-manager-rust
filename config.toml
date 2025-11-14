@@ -19,6 +19,6 @@ links = [
 
 [profiles.work]
 links = [
-  { source = ".bashrc", target = "~/.bashrowdy" },
+  { source = ".bashrc", target = "~/.bashrc" },
   { source = ".gitconfig_work", target = "~/.gitconfig" },
 ]

@@ -9,7 +9,7 @@ A terminal-based user interface (TUI) application for managing dotfiles using sy
 - 💾 **Automatic Backups** - Backs up existing files before replacing them with symlinks
 - 🔍 **Dry Run Mode** - Preview changes before applying them
 - 🎨 **Interactive TUI** - Easy-to-use terminal interface for profile selection and sync operations
-- ⚡ **Async Operations** - Non-blocking UI with background sync operations
+- ⚡ **Background Operations** - Non-blocking UI with background sync operations
 - 🪟 **Cross-platform** - Supports both Unix-like systems and Windows
 
 ## Installation
