@@ -386,37 +386,41 @@ impl DotfileManager {
             return Ok(logs);
         }
 
-        // Check if target location exists
-        if backup.target_path.exists() {
-            // Check if it's a symlink
-            if backup.target_path.is_symlink() {
-                logs.push("[INFO] Target is a symlink, will be removed".to_string());
-                if !dry_run {
-                    fs::remove_file(&backup.target_path)?;
-                }
-            } else {
-                // Regular file/directory - back it up
-                let ts = Local::now().format("%Y%m%d_%H%M%S%.6f");
-                let file_name = backup.target_path.file_name().ok_or_else(|| {
-                    io::Error::new(
-                        io::ErrorKind::InvalidInput,
-                        format!("Target path has no filename: {}", backup.target_path.display()),
-                    )
-                })?;
-                let backup_name = format!("{}_{}", file_name.to_string_lossy(), ts);
-                let new_backup_path = self.backup_path.join(backup_name);
+        // Check if target location exists (including broken symlinks)
+        // Use symlink_metadata to detect symlinks even if they're broken
+        match fs::symlink_metadata(&backup.target_path) {
+            Ok(metadata) => {
+                if metadata.is_symlink() {
+                    logs.push("[INFO] Target is a symlink, will be removed".to_string());
+                    if !dry_run {
+                        fs::remove_file(&backup.target_path)?;
+                    }
+                } else {
+                    // Regular file/directory - back it up
+                    let ts = Local::now().format("%Y%m%d_%H%M%S%.6f");
+                    let file_name = backup.target_path.file_name().ok_or_else(|| {
+                        io::Error::new(
+                            io::ErrorKind::InvalidInput,
+                            format!("Target path has no filename: {}", backup.target_path.display()),
+                        )
+                    })?;
+                    let backup_name = format!("{}_{}", file_name.to_string_lossy(), ts);
+                    let new_backup_path = self.backup_path.join(backup_name);
 
-                logs.push(format!(
-                    "[BACKUP] Backing up existing file: {} -> {}",
-                    backup.target_path.display(),
-                    new_backup_path.display()
-                ));
-                if !dry_run {
-                    fs::rename(&backup.target_path, new_backup_path)?;
+                    logs.push(format!(
+                        "[BACKUP] Backing up existing file: {} -> {}",
+                        backup.target_path.display(),
+                        new_backup_path.display()
+                    ));
+                    if !dry_run {
+                        fs::rename(&backup.target_path, new_backup_path)?;
+                    }
                 }
             }
-        } else {
-            logs.push("[INFO] Target does not exist, will be created".to_string());
+            Err(_) => {
+                // Target does not exist
+                logs.push("[INFO] Target does not exist, will be created".to_string());
+            }
         }
 
         // Ensure parent directory exists

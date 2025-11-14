@@ -7,6 +7,7 @@ A terminal-based user interface (TUI) application for managing dotfiles using sy
 - 📁 **Profile-based Management** - Organize different sets of dotfiles for different environments (work, personal, etc.)
 - 🔗 **Symlink Creation** - Automatically create symlinks from your dotfile repository to target locations
 - 💾 **Automatic Backups** - Backs up existing files before replacing them with symlinks
+- 🔄 **Restore from Backups** - Browse, preview, and restore backed-up files directly from the TUI
 - 🔍 **Dry Run Mode** - Preview changes before applying them (TUI and CLI)
 - 🎨 **Interactive TUI** - Easy-to-use terminal interface for profile selection and sync operations
 - ⚙️ **CLI Arguments** - Headless mode for automation, custom config paths, and direct profile selection
@@ -123,11 +124,21 @@ tui-dotfile-manager -c ~/dotfiles/config.toml -p personal --dry-run
 
 Once the TUI is running:
 
+#### Sync Mode (default)
 - **`j` / `↓`** - Select next profile
 - **`k` / `↑`** - Select previous profile
 - **`s` / `Enter`** - Sync the selected profile (creates symlinks)
 - **`d`** - Dry run (preview changes without applying)
+- **`r`** - Enter restore mode
 - **`q` / `Esc`** - Quit the application
+
+#### Restore Mode
+- **`j` / `↓`** - Select next backup
+- **`k` / `↑`** - Select previous backup
+- **`r` / `Enter`** - Restore the selected backup
+- **`d`** - Dry run restore (preview without applying)
+- **`Delete`** - Delete the selected backup
+- **`b` / `Esc`** - Back to sync mode
 
 ### Workflow
 
@@ -138,6 +149,15 @@ Once the TUI is running:
 4. **Preview changes** - Press `d` for a dry run
 5. **Apply changes** - Press `s` to sync the selected profile
 6. **Review logs** - Check the log panel for operation details
+
+#### Restore Workflow (TUI)
+1. **Enter restore mode** - Press `r` from the main view
+2. **Browse backups** - Use `j/k` to navigate the backup list
+3. **Preview backup** - View metadata and content preview in the preview panel
+4. **Dry run restore** - Press `d` to preview the restore operation
+5. **Restore backup** - Press `r` or `Enter` to restore the selected backup
+6. **Delete backups** - Press `Delete` to remove old backups
+7. **Return to sync mode** - Press `b` or `Esc`
 
 #### Headless (CLI) Workflow
 1. **Create your config** - Set up configuration file
@@ -177,6 +197,7 @@ alias dots-list='tui-dotfile-manager -l'
 
 ## How It Works
 
+### Sync Operation
 1. **Profile Selection**: Choose which set of dotfiles to sync
 2. **Path Resolution**: Expands `~` and resolves relative paths
 3. **Backup Creation**: If a file exists at the target location:
@@ -185,6 +206,17 @@ alias dots-list='tui-dotfile-manager -l'
    - If it's a regular file/directory, back it up with a timestamp
 4. **Symlink Creation**: Creates symlinks from your repo to target locations
 5. **Logging**: All operations are logged in the TUI
+
+### Restore Operation
+1. **Backup Discovery**: Scans the backup directory for backed-up files
+2. **Backup Parsing**: Extracts original filename and timestamp from backup filenames
+3. **Target Resolution**: Matches backups to their original target locations from the config
+4. **Preview**: Shows backup metadata, size, timestamp, and content preview
+5. **Restoration**:
+   - Removes or backs up the current file at the target location
+   - Copies the backup file to the target location
+   - Removes the backup file from the backup directory
+6. **Logging**: All operations are logged in the TUI
 
 ### Backup Format
 
@@ -253,21 +285,24 @@ cargo fmt
 
 - **TOCTOU Protection**: Uses metadata checks to avoid race conditions
 - **Backup Safety**: High-precision timestamps (microseconds) prevent overwrites
+- **Backup Before Restore**: Current files are backed up before restoration to prevent data loss
 - **Validation**: Configuration is validated on load
 - **Error Handling**: Graceful error handling with detailed messages
 - **Memory Management**: Log rotation prevents unbounded memory growth
 
 ## Limitations
 
-- No built-in rollback mechanism (backups must be restored manually)
 - No diff preview for file contents
+- Backups are stored locally (no remote backup support)
 
 ## Future Enhancements
 
-- [ ] Restore from backup functionality in TUI
+- [x] Restore from backup functionality in TUI ✅ **Completed**
 - [ ] Configuration reload without restart
 - [ ] Progress indicators for large sync operations
 - [ ] Diff preview before syncing
+- [ ] Backup compression
+- [ ] Remote backup storage
 
 ## License
 
