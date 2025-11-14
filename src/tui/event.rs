@@ -22,13 +22,13 @@ pub enum Event {
 }
 
 /// Runs the event listener in a separate thread.
-/// 
+///
 /// Sends events back to the main loop via a channel. This includes keyboard
 /// input and periodic tick events for UI updates.
-/// 
+///
 /// # Arguments
 /// * `tx` - Channel sender for transmitting events to the main thread
-/// 
+///
 /// # Errors
 /// Returns an error if the thread cannot be spawned (rare).
 /// Runtime errors in the event thread are sent as Event::Error variants.

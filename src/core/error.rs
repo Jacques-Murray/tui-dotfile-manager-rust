@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use thiserror::Error;
 
 /// A custom error enum for all possible failures in the DotfileManager.
-/// 
+///
 /// This enum uses `thiserror` to provide descriptive error messages and
 /// automatic conversion from standard library error types.
 #[derive(Debug, Error)]

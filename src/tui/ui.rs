@@ -16,7 +16,7 @@ const MIN_PROFILE_HEIGHT: u16 = 5;
 const LOG_PERCENTAGE: u16 = 70;
 
 /// Renders the entire TUI frame.
-/// 
+///
 /// The UI is divided into three sections:
 /// 1. Help bar showing available commands
 /// 2. Profile list for selection
@@ -37,7 +37,7 @@ pub fn render(f: &mut Frame, app: &App) {
 }
 
 /// Renders the help bar showing available key bindings.
-/// 
+///
 /// Displays different content when a sync is in progress.
 fn render_help(f: &mut Frame, app: &App, area: Rect) {
     let text = if app.sync_in_progress {
@@ -113,7 +113,7 @@ fn render_profile_list(f: &mut Frame, app: &App, area: Rect) {
 }
 
 /// Renders the log output panel with auto-scrolling.
-/// 
+///
 /// The log automatically scrolls to show the most recent messages.
 fn render_log_output(f: &mut Frame, app: &App, area: Rect) {
     let text: Vec<Line> = app

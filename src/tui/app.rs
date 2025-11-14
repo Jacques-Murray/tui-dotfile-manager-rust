@@ -18,7 +18,7 @@ pub enum WorkerMessage {
 }
 
 /// Represents the TUI's state and logic.
-/// 
+///
 /// The App struct maintains the application state including the selected profile,
 /// log messages, and sync status. It handles user input and coordinates with
 /// background worker threads for I/O operations.
@@ -34,11 +34,11 @@ pub struct App {
 
 impl App {
     /// Creates a new App.
-    /// 
+    ///
     /// # Arguments
     /// * `manager` - Shared reference to the DotfileManager
     /// * `log_tx` - Channel sender for receiving log messages from worker threads
-    /// 
+    ///
     /// # Returns
     /// A new App instance with initial welcome messages and the first profile selected.
     pub fn new(manager: Arc<DotfileManager>, log_tx: mpsc::Sender<WorkerMessage>) -> Self {
@@ -61,14 +61,14 @@ impl App {
     }
 
     /// Handles a key press event.
-    /// 
+    ///
     /// # Key Bindings
     /// * `q` or `Esc` - Quit the application
     /// * `j` or `Down` - Select next profile
     /// * `k` or `Up` - Select previous profile
     /// * `s` or `Enter` - Start sync for selected profile
     /// * `d` - Start dry run for selected profile
-    /// 
+    ///
     /// Input is ignored while a sync operation is in progress.
     pub fn on_key(&mut self, key: KeyCode) {
         if self.sync_in_progress {
@@ -86,7 +86,7 @@ impl App {
     }
 
     /// Selects the next profile in the list.
-    /// 
+    ///
     /// Wraps around to the first profile when reaching the end.
     fn select_next(&mut self) {
         if self.profiles.is_empty() {
@@ -102,7 +102,7 @@ impl App {
     }
 
     /// Selects the previous profile in the list.
-    /// 
+    ///
     /// Wraps around to the last profile when at the beginning.
     fn select_previous(&mut self) {
         if self.profiles.is_empty() {
@@ -118,10 +118,10 @@ impl App {
     }
 
     /// Spawns a worker thread to perform the sync.
-    /// 
+    ///
     /// # Arguments
     /// * `dry_run` - If true, performs a dry run without making changes
-    /// 
+    ///
     /// The sync operation runs in a background thread to keep the UI responsive.
     /// Log messages are sent back via the log channel.
     fn start_sync(&mut self, dry_run: bool) {
@@ -150,22 +150,25 @@ impl App {
                         }
                     }
                     Err(e) => {
-                        log_tx.send(WorkerMessage::Log(format!("[FATAL ERROR] {}", e))).ok();
+                        log_tx
+                            .send(WorkerMessage::Log(format!("[FATAL ERROR] {}", e)))
+                            .ok();
                     }
                 }
                 // Send a signal that the thread is done
                 log_tx.send(WorkerMessage::SyncComplete).ok();
             });
         } else {
-            self.logs.push_back("[ERROR] No profile selected.".to_string());
+            self.logs
+                .push_back("[ERROR] No profile selected.".to_string());
         }
     }
 
     /// Called when the app receives a new message from a worker thread.
-    /// 
+    ///
     /// # Arguments
     /// * `msg` - The message received from a worker thread
-    /// 
+    ///
     /// Handles log messages and sync completion signals.
     /// Implements log rotation to prevent unbounded memory growth.
     pub fn on_log(&mut self, msg: WorkerMessage) {

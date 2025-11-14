@@ -9,7 +9,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 /// Encapsulates all dotfile management logic.
-/// 
+///
 /// The manager is responsible for loading configuration, resolving paths,
 /// and executing sync operations. It is stateless after initialization
 /// and can be safely shared across threads.
@@ -23,22 +23,22 @@ pub struct DotfileManager {
 
 impl DotfileManager {
     /// Creates a new manager by loading and parsing the config file.
-    /// 
+    ///
     /// # Arguments
     /// * `config_path` - Path to the TOML configuration file
-    /// 
+    ///
     /// # Errors
     /// Returns an error if:
     /// - The configuration file doesn't exist
     /// - The file cannot be read
     /// - The TOML is invalid
     /// - The configuration fails validation
-    /// 
+    ///
     /// # Example
     /// ```no_run
     /// use std::path::Path;
     /// use tui_dotfile_manager::DotfileManager;
-    /// 
+    ///
     /// fn main() -> Result<(), Box<dyn std::error::Error>> {
     ///     let manager = DotfileManager::new(Path::new("config.toml"))?;
     ///     Ok(())
@@ -51,7 +51,7 @@ impl DotfileManager {
 
         let config_str = fs::read_to_string(config_path)?;
         let config: Config = toml::from_str(&config_str)?;
-        
+
         // Validate configuration
         if let Err(e) = config.validate() {
             return Err(ManagerError::ConfigValidation(e));
@@ -75,10 +75,10 @@ impl DotfileManager {
     }
 
     /// Returns a sorted list of available profile names.
-    /// 
+    ///
     /// Profile names are sorted alphabetically for consistent display
     /// in the user interface.
-    /// 
+    ///
     /// # Example
     /// ```no_run
     /// # use std::path::Path;
@@ -137,10 +137,7 @@ impl DotfileManager {
                     "  [WARN] Source file does not exist: {}",
                     link.source.display()
                 ));
-                logs.push(format!(
-                    "         Expected at: {}",
-                    source.display()
-                ));
+                logs.push(format!("         Expected at: {}", source.display()));
                 continue;
             }
 
@@ -186,13 +183,12 @@ impl DotfileManager {
                     // Not a symlink, treat as file or directory
                     let ts = Local::now().format("%Y%m%d_%H%M%S%.6f");
                     let file_name = target.file_name().ok_or_else(|| {
-                        io::Error::new(io::ErrorKind::InvalidInput, format!("Target path has no filename: {}", target.display()))
+                        io::Error::new(
+                            io::ErrorKind::InvalidInput,
+                            format!("Target path has no filename: {}", target.display()),
+                        )
                     })?;
-                    let backup_name = format!(
-                        "{}_{}",
-                        file_name.to_string_lossy(),
-                        ts
-                    );
+                    let backup_name = format!("{}_{}", file_name.to_string_lossy(), ts);
                     let backup_path = self.backup_path.join(backup_name);
 
                     logs.push(format!(
@@ -230,7 +226,7 @@ impl DotfileManager {
     }
 
     /// Creates a platform-aware symlink (file vs. dir on Windows).
-    /// 
+    ///
     /// On Windows, different functions are needed for file and directory symlinks.
     #[cfg(windows)]
     fn create_symlink(&self, source: &Path, target: &Path) -> Result<(), io::Error> {
@@ -242,7 +238,7 @@ impl DotfileManager {
     }
 
     /// Creates a platform-aware symlink (Unix).
-    /// 
+    ///
     /// On Unix-like systems, a single function handles both files and directories.
     #[cfg(not(windows))]
     fn create_symlink(&self, source: &Path, target: &Path) -> Result<(), io::Error> {
@@ -250,11 +246,11 @@ impl DotfileManager {
     }
 
     /// Helper to expand '~' and resolve paths.
-    /// 
+    ///
     /// # Arguments
     /// * `base` - Base directory for relative paths
     /// * `p` - Path to resolve (may contain ~ or be relative/absolute)
-    /// 
+    ///
     /// # Behavior
     /// - Expands ~ to the user's home directory
     /// - If the path is absolute (after expansion), returns it as-is
