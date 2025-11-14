@@ -7,8 +7,9 @@ A terminal-based user interface (TUI) application for managing dotfiles using sy
 - 📁 **Profile-based Management** - Organize different sets of dotfiles for different environments (work, personal, etc.)
 - 🔗 **Symlink Creation** - Automatically create symlinks from your dotfile repository to target locations
 - 💾 **Automatic Backups** - Backs up existing files before replacing them with symlinks
-- 🔍 **Dry Run Mode** - Preview changes before applying them
+- 🔍 **Dry Run Mode** - Preview changes before applying them (TUI and CLI)
 - 🎨 **Interactive TUI** - Easy-to-use terminal interface for profile selection and sync operations
+- ⚙️ **CLI Arguments** - Headless mode for automation, custom config paths, and direct profile selection
 - ⚡ **Background Operations** - Non-blocking UI with background sync operations
 - 🪟 **Cross-platform** - Supports both Unix-like systems and Windows
 
@@ -74,7 +75,51 @@ links = [
 
 ## Usage
 
-### Key Bindings
+### Interactive TUI Mode
+
+By default, running the application without arguments launches the interactive TUI:
+
+```bash
+# Launch TUI with default config.toml
+tui-dotfile-manager
+
+# Launch TUI with custom config
+tui-dotfile-manager --config ~/.config/dotfiles/config.toml
+```
+
+### CLI Arguments (Headless Mode)
+
+The application supports command-line arguments for automation and scripting:
+
+```bash
+# List available profiles
+tui-dotfile-manager --list-profiles
+tui-dotfile-manager -l
+
+# Sync a specific profile (headless mode)
+tui-dotfile-manager --profile personal
+tui-dotfile-manager -p work
+
+# Perform a dry run (preview changes without applying)
+tui-dotfile-manager --profile work --dry-run
+tui-dotfile-manager -p personal -d
+
+# Use a custom config file
+tui-dotfile-manager --config ~/.dotfiles/work.toml --profile work
+
+# Combine options
+tui-dotfile-manager -c ~/dotfiles/config.toml -p personal --dry-run
+```
+
+**Available Options:**
+- `-c, --config <PATH>` - Path to configuration file (default: `config.toml`)
+- `-p, --profile <NAME>` - Profile to sync (skips TUI if provided)
+- `-d, --dry-run` - Perform a dry run without making changes
+- `-l, --list-profiles` - List available profiles and exit
+- `-h, --help` - Print help information
+- `-V, --version` - Print version information
+
+### TUI Key Bindings
 
 Once the TUI is running:
 
@@ -86,12 +131,49 @@ Once the TUI is running:
 
 ### Workflow
 
+#### Interactive (TUI) Workflow
 1. **Create your config** - Set up `config.toml` with your profiles
 2. **Launch the TUI** - Run the application
 3. **Select a profile** - Use arrow keys or `j/k` to navigate
 4. **Preview changes** - Press `d` for a dry run
 5. **Apply changes** - Press `s` to sync the selected profile
 6. **Review logs** - Check the log panel for operation details
+
+#### Headless (CLI) Workflow
+1. **Create your config** - Set up configuration file
+2. **List profiles** - Run `tui-dotfile-manager --list-profiles` to see available profiles
+3. **Preview changes** - Run `tui-dotfile-manager -p <profile> --dry-run`
+4. **Apply changes** - Run `tui-dotfile-manager -p <profile>`
+
+### Use Cases
+
+**Automation & Scripting:**
+```bash
+#!/bin/bash
+# Auto-sync work profile on login
+tui-dotfile-manager -c ~/.dotfiles/config.toml -p work
+```
+
+**Multiple Configurations:**
+```bash
+# Switch between different dotfile repos
+tui-dotfile-manager -c ~/.dotfiles/personal.toml -p default
+tui-dotfile-manager -c ~/.dotfiles/work.toml -p corporate
+```
+
+**CI/CD Integration:**
+```bash
+# Test dotfile sync in GitHub Actions
+tui-dotfile-manager --config ./test-config.toml --profile test --dry-run
+```
+
+**Quick Profile Switching (Shell Aliases):**
+```bash
+# Add to your .bashrc or .zshrc
+alias dots-work='tui-dotfile-manager -p work'
+alias dots-personal='tui-dotfile-manager -p personal'
+alias dots-list='tui-dotfile-manager -l'
+```
 
 ## How It Works
 
@@ -165,6 +247,7 @@ cargo fmt
 - **anyhow** & **thiserror** - Error handling
 - **chrono** - Timestamp generation
 - **shellexpand** - Path expansion (`~` support)
+- **clap** - Command-line argument parsing
 
 ## Safety & Behavior
 
@@ -176,13 +259,11 @@ cargo fmt
 
 ## Limitations
 
-- Currently looks for `config.toml` in the current directory only
 - No built-in rollback mechanism (backups must be restored manually)
 - No diff preview for file contents
 
 ## Future Enhancements
 
-- [ ] CLI arguments for config path and profile selection
 - [ ] Restore from backup functionality in TUI
 - [ ] Configuration reload without restart
 - [ ] Progress indicators for large sync operations
