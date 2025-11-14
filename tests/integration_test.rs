@@ -610,19 +610,14 @@ links = [
 
     // Restore backup for real
     let restore_logs = manager.restore_backup(backup, false)?;
-    for log in &restore_logs {
-        println!("{}", log);
-    }
     assert!(restore_logs.iter().any(|s| s.contains("Restoring backup")));
     assert!(restore_logs.iter().any(|s| s.contains("RESTORE")));
 
-    // Check if it's still a symlink
-    println!("Is symlink after restore: {}", home_dir.child(".bashrc").path().is_symlink());
-    
     // Verify the old content was restored
-    let content = fs::read_to_string(home_dir.child(".bashrc").path())?;
-    println!("Content after restore: {}", content);
-    assert_eq!(content, "OLD BASHRC");
+    assert_eq!(
+        fs::read_to_string(home_dir.child(".bashrc").path())?,
+        "OLD BASHRC"
+    );
 
     // Verify backup file was removed
     assert!(!backup.backup_path.exists());
