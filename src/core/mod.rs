@@ -2,6 +2,7 @@
 //! Core module: contains all the business logic.
 
 pub mod config;
+pub mod diff;
 pub mod error;
 pub mod manager;
 pub mod restore;

@@ -1,6 +1,7 @@
 // Author: Jacques Murray
 //! Defines the TUI application state (App struct).
 
+use crate::core::diff::DiffResult;
 use crate::core::restore::BackupEntry;
 use crate::core::DotfileManager;
 use crossterm::event::KeyCode;
@@ -19,6 +20,8 @@ pub enum AppMode {
     Sync,
     /// Restore mode - browse and restore backups
     Restore,
+    /// Diff preview mode - view diffs before syncing
+    DiffPreview,
 }
 
 /// Messages sent from worker threads to the main UI thread.
@@ -27,6 +30,7 @@ pub enum WorkerMessage {
     SyncComplete,
     RestoreComplete,
     BackupsListed(Vec<BackupEntry>),
+    DiffGenerated(Vec<DiffResult>),
 }
 
 /// Represents the TUI's state and logic.
@@ -45,6 +49,9 @@ pub struct App {
     pub backups: Vec<BackupEntry>,
     pub selected_backup: Option<usize>,
     pub restore_in_progress: bool,
+    pub diffs: Vec<DiffResult>,
+    pub selected_diff: Option<usize>,
+    pub diff_scroll: u16,
     log_tx: mpsc::Sender<WorkerMessage>,
 }
 
@@ -68,7 +75,7 @@ impl App {
             logs: VecDeque::from([
                 "Welcome to the TUI Dotfile Manager!".to_string(),
                 "Use 'j'/'k' or Arrow Up/Down to select a profile.".to_string(),
-                "'s' = Sync, 'd' = Dry Run, 'r' = Restore Mode, 'q' = Quit.".to_string(),
+                "'s' = Sync, 'd' = Dry Run, 'p' = Diff Preview, 'r' = Restore Mode, 'q' = Quit.".to_string(),
             ]),
             should_quit: false,
             sync_in_progress: false,
@@ -76,6 +83,9 @@ impl App {
             backups: Vec::new(),
             selected_backup: None,
             restore_in_progress: false,
+            diffs: Vec::new(),
+            selected_diff: None,
+            diff_scroll: 0,
             log_tx,
         }
     }
@@ -88,6 +98,7 @@ impl App {
     /// * `k` or `Up` - Select previous profile
     /// * `s` or `Enter` - Start sync for selected profile
     /// * `d` - Start dry run for selected profile
+    /// * `p` - Preview diff for selected profile
     /// * `r` - Enter restore mode
     ///
     /// # Key Bindings (Restore Mode)
@@ -98,6 +109,13 @@ impl App {
     /// * `d` - Dry run restore for selected backup
     /// * `Delete` - Delete selected backup
     ///
+    /// # Key Bindings (Diff Preview Mode)
+    /// * `Esc` or `q` - Back to sync mode
+    /// * `j` or `Down` - Scroll down
+    /// * `k` or `Up` - Scroll up
+    /// * `n` - Next diff
+    /// * `N` - Previous diff
+    ///
     /// Input is ignored while a sync or restore operation is in progress.
     pub fn on_key(&mut self, key: KeyCode) {
         if self.sync_in_progress || self.restore_in_progress {
@@ -107,6 +125,7 @@ impl App {
         match self.mode {
             AppMode::Sync => self.handle_sync_mode_key(key),
             AppMode::Restore => self.handle_restore_mode_key(key),
+            AppMode::DiffPreview => self.handle_diff_mode_key(key),
         }
     }
 
@@ -118,6 +137,7 @@ impl App {
             KeyCode::Char('k') | KeyCode::Up => self.select_previous_profile(),
             KeyCode::Char('d') => self.start_sync(true),
             KeyCode::Char('s') | KeyCode::Enter => self.start_sync(false),
+            KeyCode::Char('p') => self.enter_diff_preview_mode(),
             KeyCode::Char('r') => self.enter_restore_mode(),
             _ => {}
         }
@@ -400,6 +420,102 @@ impl App {
         }
     }
 
+    /// Handles key presses in diff preview mode.
+    fn handle_diff_mode_key(&mut self, key: KeyCode) {
+        match key {
+            KeyCode::Esc | KeyCode::Char('q') => self.exit_diff_preview_mode(),
+            KeyCode::Char('j') | KeyCode::Down => self.scroll_diff_down(),
+            KeyCode::Char('k') | KeyCode::Up => self.scroll_diff_up(),
+            KeyCode::Char('n') => self.select_next_diff(),
+            KeyCode::Char('N') => self.select_previous_diff(),
+            _ => {}
+        }
+    }
+
+    /// Enters diff preview mode and generates diffs for the selected profile.
+    fn enter_diff_preview_mode(&mut self) {
+        if let Some(selected_index) = self.selected_profile {
+            let profile_name = self.profiles[selected_index].clone();
+            self.mode = AppMode::DiffPreview;
+            self.diff_scroll = 0;
+            self.logs.push_back("---".to_string());
+            self.logs
+                .push_back(format!("Generating diff preview for profile: {}", profile_name));
+
+            let manager = Arc::clone(&self.manager);
+            let log_tx = self.log_tx.clone();
+
+            // Spawn a thread to generate diffs
+            thread::spawn(move || match manager.preview_diff(&profile_name) {
+                Ok(diffs) => {
+                    log_tx.send(WorkerMessage::DiffGenerated(diffs)).ok();
+                }
+                Err(e) => {
+                    log_tx
+                        .send(WorkerMessage::Log(format!(
+                            "[ERROR] Failed to generate diff: {}",
+                            e
+                        )))
+                        .ok();
+                    log_tx.send(WorkerMessage::DiffGenerated(Vec::new())).ok();
+                }
+            });
+        } else {
+            self.logs
+                .push_back("[ERROR] No profile selected.".to_string());
+        }
+    }
+
+    /// Exits diff preview mode and returns to sync mode.
+    fn exit_diff_preview_mode(&mut self) {
+        self.mode = AppMode::Sync;
+        self.diffs.clear();
+        self.selected_diff = None;
+        self.diff_scroll = 0;
+        self.logs.push_back("---".to_string());
+        self.logs.push_back("Exited Diff Preview Mode".to_string());
+    }
+
+    /// Scrolls down in the diff view.
+    fn scroll_diff_down(&mut self) {
+        self.diff_scroll = self.diff_scroll.saturating_add(1);
+    }
+
+    /// Scrolls up in the diff view.
+    fn scroll_diff_up(&mut self) {
+        self.diff_scroll = self.diff_scroll.saturating_sub(1);
+    }
+
+    /// Selects the next diff in the list.
+    fn select_next_diff(&mut self) {
+        if self.diffs.is_empty() {
+            return;
+        }
+        let i = self.selected_diff.unwrap_or(0);
+        let next = if i >= self.diffs.len() - 1 {
+            0
+        } else {
+            i + 1
+        };
+        self.selected_diff = Some(next);
+        self.diff_scroll = 0; // Reset scroll when switching diffs
+    }
+
+    /// Selects the previous diff in the list.
+    fn select_previous_diff(&mut self) {
+        if self.diffs.is_empty() {
+            return;
+        }
+        let i = self.selected_diff.unwrap_or(0);
+        let prev = if i == 0 {
+            self.diffs.len() - 1
+        } else {
+            i - 1
+        };
+        self.selected_diff = Some(prev);
+        self.diff_scroll = 0; // Reset scroll when switching diffs
+    }
+
     /// Called when the app receives a new message from a worker thread.
     ///
     /// # Arguments
@@ -429,6 +545,12 @@ impl App {
                 self.backups = backups;
                 self.selected_backup = if count > 0 { Some(0) } else { None };
                 self.logs.push_back(format!("Found {} backup(s)", count));
+            }
+            WorkerMessage::DiffGenerated(diffs) => {
+                let count = diffs.len();
+                self.diffs = diffs;
+                self.selected_diff = if count > 0 { Some(0) } else { None };
+                self.logs.push_back(format!("Generated {} diff(s)", count));
             }
         }
     }
