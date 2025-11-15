@@ -95,6 +95,21 @@ impl DotfileManager {
         profiles
     }
 
+    /// Returns the number of links for a given profile.
+    ///
+    /// # Arguments
+    /// * `profile_name` - Name of the profile
+    ///
+    /// # Returns
+    /// The number of links in the profile, or 0 if the profile doesn't exist.
+    pub fn get_profile_link_count(&self, profile_name: &str) -> usize {
+        self.config
+            .profiles
+            .get(profile_name)
+            .map(|p| p.links.len())
+            .unwrap_or(0)
+    }
+
     /// Executes the sync, either for real or as a dry run.
     /// Returns a list of log messages.
     pub fn execute_sync(
@@ -102,6 +117,25 @@ impl DotfileManager {
         profile_name: &str,
         dry_run: bool,
     ) -> Result<Vec<String>, ManagerError> {
+        self.execute_sync_with_progress(profile_name, dry_run, |_, _, _| {})
+    }
+
+    /// Executes the sync with progress reporting, either for real or as a dry run.
+    /// Returns a list of log messages.
+    ///
+    /// # Arguments
+    /// * `profile_name` - Name of the profile to sync
+    /// * `dry_run` - If true, only simulates changes without applying them
+    /// * `progress_callback` - Function called for each file processed: (current, total, filename)
+    pub fn execute_sync_with_progress<F>(
+        &self,
+        profile_name: &str,
+        dry_run: bool,
+        progress_callback: F,
+    ) -> Result<Vec<String>, ManagerError>
+    where
+        F: Fn(usize, usize, &str),
+    {
         let mut logs = Vec::new();
 
         if dry_run {
@@ -120,16 +154,24 @@ impl DotfileManager {
             .get(profile_name)
             .ok_or_else(|| ManagerError::ProfileNotFound(profile_name.to_string()))?;
 
-        for link in &profile.links {
+        let total_files = profile.links.len();
+
+        for (index, link) in profile.links.iter().enumerate() {
             let source = Self::resolve_path(&self.repo_path, &link.source);
             let target = Self::resolve_path(&self.config_dir, &link.target);
 
+            let current_file = source
+                .strip_prefix(&self.repo_path)
+                .unwrap_or(&source)
+                .display()
+                .to_string();
+
+            // Report progress
+            progress_callback(index + 1, total_files, &current_file);
+
             logs.push(format!(
                 "Processing: {} -> {}",
-                source
-                    .strip_prefix(&self.repo_path)
-                    .unwrap_or(&source)
-                    .display(),
+                current_file,
                 target.display()
             ));
 

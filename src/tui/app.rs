@@ -27,6 +27,16 @@ pub enum WorkerMessage {
     SyncComplete,
     RestoreComplete,
     BackupsListed(Vec<BackupEntry>),
+    SyncStarted { total_files: usize },
+    Progress { current: usize, total: usize, file: String },
+}
+
+/// Tracks sync progress for UI display.
+#[derive(Debug, Clone)]
+pub struct SyncProgress {
+    pub current: usize,
+    pub total: usize,
+    pub current_file: String,
 }
 
 /// Represents the TUI's state and logic.
@@ -41,6 +51,7 @@ pub struct App {
     pub logs: VecDeque<String>,
     pub should_quit: bool,
     pub sync_in_progress: bool,
+    pub sync_progress: Option<SyncProgress>,
     pub mode: AppMode,
     pub backups: Vec<BackupEntry>,
     pub selected_backup: Option<usize>,
@@ -72,6 +83,7 @@ impl App {
             ]),
             should_quit: false,
             sync_in_progress: false,
+            sync_progress: None,
             mode: AppMode::Sync,
             backups: Vec::new(),
             selected_backup: None,
@@ -261,7 +273,20 @@ impl App {
 
             // Spawn the blocking I/O in a separate thread
             thread::spawn(move || {
-                match manager.execute_sync(&profile_name, dry_run) {
+                // Get the total number of files
+                let total_files = manager.get_profile_link_count(&profile_name);
+
+                // Send sync started message
+                log_tx.send(WorkerMessage::SyncStarted { total_files }).ok();
+
+                // Execute sync with progress callback
+                match manager.execute_sync_with_progress(&profile_name, dry_run, |current, total, file| {
+                    log_tx.send(WorkerMessage::Progress {
+                        current,
+                        total,
+                        file: file.to_string(),
+                    }).ok();
+                }) {
                     Ok(logs) => {
                         for log in logs {
                             log_tx.send(WorkerMessage::Log(log)).ok();
@@ -418,6 +443,7 @@ impl App {
             }
             WorkerMessage::SyncComplete => {
                 self.sync_in_progress = false;
+                self.sync_progress = None;
             }
             WorkerMessage::RestoreComplete => {
                 self.restore_in_progress = false;
@@ -429,6 +455,20 @@ impl App {
                 self.backups = backups;
                 self.selected_backup = if count > 0 { Some(0) } else { None };
                 self.logs.push_back(format!("Found {} backup(s)", count));
+            }
+            WorkerMessage::SyncStarted { total_files } => {
+                self.sync_progress = Some(SyncProgress {
+                    current: 0,
+                    total: total_files,
+                    current_file: String::new(),
+                });
+            }
+            WorkerMessage::Progress { current, total, file } => {
+                self.sync_progress = Some(SyncProgress {
+                    current,
+                    total,
+                    current_file: file,
+                });
             }
         }
     }
