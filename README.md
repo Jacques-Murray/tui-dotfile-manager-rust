@@ -9,6 +9,7 @@ A terminal-based user interface (TUI) application for managing dotfiles using sy
 - 💾 **Automatic Backups** - Backs up existing files before replacing them with symlinks
 - 🔄 **Restore from Backups** - Browse, preview, and restore backed-up files directly from the TUI
 - 🔍 **Dry Run Mode** - Preview changes before applying them (TUI and CLI)
+- 📊 **Diff Preview** - View file content differences before syncing (NEW!)
 - 🎨 **Interactive TUI** - Easy-to-use terminal interface for profile selection and sync operations
 - ⚙️ **CLI Arguments** - Headless mode for automation, custom config paths, and direct profile selection
 - ⚡ **Background Operations** - Non-blocking UI with background sync operations
@@ -129,8 +130,16 @@ Once the TUI is running:
 - **`k` / `↑`** - Select previous profile
 - **`s` / `Enter`** - Sync the selected profile (creates symlinks)
 - **`d`** - Dry run (preview changes without applying)
+- **`p`** - Diff preview (view file content differences)
 - **`r`** - Enter restore mode
 - **`q` / `Esc`** - Quit the application
+
+#### Diff Preview Mode
+- **`j` / `↓`** - Scroll down in the diff view
+- **`k` / `↑`** - Scroll up in the diff view
+- **`n`** - Navigate to next file diff
+- **`N`** - Navigate to previous file diff
+- **`q` / `Esc`** - Exit diff preview mode and return to sync mode
 
 #### Restore Mode
 - **`j` / `↓`** - Select next backup
@@ -146,9 +155,21 @@ Once the TUI is running:
 1. **Create your config** - Set up `config.toml` with your profiles
 2. **Launch the TUI** - Run the application
 3. **Select a profile** - Use arrow keys or `j/k` to navigate
-4. **Preview changes** - Press `d` for a dry run
+4. **Preview changes** - Press `d` for a dry run or `p` for diff preview
 5. **Apply changes** - Press `s` to sync the selected profile
 6. **Review logs** - Check the log panel for operation details
+
+#### Diff Preview Workflow (TUI)
+1. **Select a profile** - Navigate to the profile you want to preview
+2. **Enter diff mode** - Press `p` to generate and view diffs
+3. **Review diffs** - See color-coded differences:
+   - Green lines (+) will be added from your dotfiles
+   - Red lines (-) will be removed from existing files
+   - Gray lines are unchanged context
+4. **Navigate** - Use `n`/`N` to switch between different file diffs
+5. **Scroll** - Use `j`/`k` to scroll through long diffs
+6. **Exit** - Press `q` or `Esc` to return to sync mode
+7. **Sync if satisfied** - Return to sync mode and press `s` to apply changes
 
 #### Restore Workflow (TUI)
 1. **Enter restore mode** - Press `r` from the main view
@@ -206,6 +227,20 @@ alias dots-list='tui-dotfile-manager -l'
    - If it's a regular file/directory, back it up with a timestamp
 4. **Symlink Creation**: Creates symlinks from your repo to target locations
 5. **Logging**: All operations are logged in the TUI
+
+### Diff Preview Operation
+1. **Diff Generation**: For each file in the selected profile:
+   - Compares the source file in your dotfiles repo with the target file (if it exists)
+   - Detects file type (text, binary, symlink, new file)
+2. **Display**: Shows color-coded differences:
+   - **Green (+)**: Lines that will be added from your dotfiles
+   - **Red (-)**: Lines that will be removed from the existing file
+   - **Gray**: Context lines (unchanged)
+3. **Special Cases**:
+   - **New files**: Shows the entire content that will be created
+   - **Binary files**: Shows a message indicating binary content (no diff)
+   - **Existing symlinks**: Shows message if already correctly linked
+   - **Errors**: Displays error messages for unreadable files
 
 ### Restore Operation
 1. **Backup Discovery**: Scans the backup directory for backed-up files
@@ -280,6 +315,7 @@ cargo fmt
 - **chrono** - Timestamp generation
 - **shellexpand** - Path expansion (`~` support)
 - **clap** - Command-line argument parsing
+- **similar** - Text diff generation
 
 ## Safety & Behavior
 
@@ -292,15 +328,14 @@ cargo fmt
 
 ## Limitations
 
-- No diff preview for file contents
 - Backups are stored locally (no remote backup support)
 
 ## Future Enhancements
 
 - [x] Restore from backup functionality in TUI ✅ **Completed**
+- [x] Diff preview before syncing ✅ **Completed**
 - [ ] Configuration reload without restart
 - [ ] Progress indicators for large sync operations
-- [ ] Diff preview before syncing
 - [ ] Backup compression
 - [ ] Remote backup storage
 

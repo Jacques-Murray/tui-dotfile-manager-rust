@@ -747,3 +747,146 @@ links = [
 
     Ok(())
 }
+
+#[test]
+fn test_diff_preview() -> Result<(), Box<dyn std::error::Error>> {
+    use tui_dotfile_manager::core::diff::DiffResult;
+
+    // Setup a temporary file system
+    let temp = assert_fs::TempDir::new()?;
+    let config_path = temp.child("config.toml");
+    let repo_dir = temp.child("dotfiles");
+    let backup_dir = temp.child("backups");
+    let home_dir = temp.child("home");
+
+    // Create mock dotfiles
+    repo_dir
+        .child(".bashrc")
+        .write_str("# New bashrc\necho 'Hello from new bashrc'\n")?;
+    repo_dir
+        .child(".vimrc")
+        .write_str("set number\nset tabstop=4\n")?;
+
+    // Create mock existing files in 'home' with different content
+    home_dir
+        .child(".bashrc")
+        .write_str("# Old bashrc\necho 'Hello from old bashrc'\n")?;
+    // .vimrc doesn't exist - should show as new file
+
+    // Create the config.toml
+    let config_content = format!(
+        r#"
+[settings]
+repo_dir = "{}"
+backup_dir = "{}"
+
+[profiles.test]
+links = [
+    {{ source = ".bashrc", target = "{}/.bashrc" }},
+    {{ source = ".vimrc", target = "{}/.vimrc" }}
+]
+"#,
+        repo_dir.path().display(),
+        backup_dir.path().display(),
+        home_dir.path().display(),
+        home_dir.path().display()
+    );
+    config_path.write_str(&config_content)?;
+
+    // Initialize the manager
+    let manager = DotfileManager::new(config_path.path())?;
+
+    // Generate diff preview
+    let diffs = manager.preview_diff("test")?;
+
+    // Should have two diffs: one for .bashrc (modified) and one for .vimrc (new)
+    assert_eq!(diffs.len(), 2);
+
+    // Check first diff (.bashrc) - should be a FileDiff
+    match &diffs[0] {
+        DiffResult::FileDiff { diff_lines, .. } => {
+            // Should have some diff lines
+            assert!(!diff_lines.is_empty());
+        }
+        _ => panic!("Expected FileDiff for .bashrc"),
+    }
+
+    // Check second diff (.vimrc) - should be a NewFile
+    match &diffs[1] {
+        DiffResult::NewFile {
+            content_preview, ..
+        } => {
+            // Should have content preview
+            assert!(!content_preview.is_empty());
+            assert!(content_preview.iter().any(|l| l.contains("set number")));
+        }
+        _ => panic!("Expected NewFile for .vimrc"),
+    }
+
+    Ok(())
+}
+
+#[test]
+fn test_diff_preview_binary_file() -> Result<(), Box<dyn std::error::Error>> {
+    use std::io::Write;
+    use tui_dotfile_manager::core::diff::DiffResult;
+
+    // Setup a temporary file system
+    let temp = assert_fs::TempDir::new()?;
+    let config_path = temp.child("config.toml");
+    let repo_dir = temp.child("dotfiles");
+    let backup_dir = temp.child("backups");
+    let home_dir = temp.child("home");
+
+    // Create directories
+    fs::create_dir_all(repo_dir.path())?;
+    fs::create_dir_all(home_dir.path())?;
+
+    // Create a binary file in repo
+    let mut file = fs::File::create(repo_dir.child("image.bin").path())?;
+    file.write_all(&[0u8, 1, 2, 3, 0, 255])?;
+    drop(file);
+
+    // Create a different binary file in home
+    let mut file = fs::File::create(home_dir.child("image.bin").path())?;
+    file.write_all(&[0u8, 5, 6, 7, 0, 255])?;
+    drop(file);
+
+    // Create the config.toml
+    let config_content = format!(
+        r#"
+[settings]
+repo_dir = "{}"
+backup_dir = "{}"
+
+[profiles.test]
+links = [
+    {{ source = "image.bin", target = "{}/image.bin" }}
+]
+"#,
+        repo_dir.path().display(),
+        backup_dir.path().display(),
+        home_dir.path().display()
+    );
+    config_path.write_str(&config_content)?;
+
+    // Initialize the manager
+    let manager = DotfileManager::new(config_path.path())?;
+
+    // Generate diff preview
+    let diffs = manager.preview_diff("test")?;
+
+    // Should have one diff for the binary file
+    assert_eq!(diffs.len(), 1);
+
+    // Check diff - should be BinaryFile
+    match &diffs[0] {
+        DiffResult::BinaryFile { .. } => {
+            // Expected
+        }
+        _ => panic!("Expected BinaryFile for image.bin"),
+    }
+
+    Ok(())
+}
+
