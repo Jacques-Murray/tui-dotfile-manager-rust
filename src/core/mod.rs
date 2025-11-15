@@ -4,6 +4,7 @@
 pub mod config;
 pub mod error;
 pub mod manager;
+pub mod restore;
 
 // Publicly export the main components for library usage.
 // ManagerError is re-exported for external crates that might use this as a library.
