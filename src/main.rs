@@ -16,7 +16,7 @@ use ratatui::{backend::CrosstermBackend, Terminal};
 use std::{
     io,
     path::PathBuf,
-    sync::{mpsc, Arc},
+    sync::{mpsc, Arc, RwLock},
 };
 use tui::{
     app::{App, WorkerMessage},
@@ -76,7 +76,7 @@ fn main() -> Result<()> {
     }
 
     // 4. Interactive TUI mode (existing behavior)
-    let manager_arc = Arc::new(manager);
+    let manager_arc = Arc::new(RwLock::new(manager));
 
     // Setup channels for communication
     // event_tx/event_rx: For TUI events (keys, ticks)
@@ -96,7 +96,7 @@ fn main() -> Result<()> {
     let mut terminal = Terminal::new(backend)?;
 
     // Create the App state
-    let mut app = App::new(manager_arc, log_tx);
+    let mut app = App::new(manager_arc, args.config.clone(), log_tx);
 
     // Start the event listener thread
     event::run(event_tx)?;
