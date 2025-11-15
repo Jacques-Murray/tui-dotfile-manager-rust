@@ -8,6 +8,7 @@ A terminal-based user interface (TUI) application for managing dotfiles using sy
 - 🔗 **Symlink Creation** - Automatically create symlinks from your dotfile repository to target locations
 - 💾 **Automatic Backups** - Backs up existing files before replacing them with symlinks
 - 🔄 **Restore from Backups** - Browse, preview, and restore backed-up files directly from the TUI
+- 🔃 **Configuration Reload** - Reload config.toml without restarting the application (press `R`)
 - 🔍 **Dry Run Mode** - Preview changes before applying them (TUI and CLI)
 - 🎨 **Interactive TUI** - Easy-to-use terminal interface for profile selection and sync operations
 - ⚙️ **CLI Arguments** - Headless mode for automation, custom config paths, and direct profile selection
@@ -129,6 +130,7 @@ Once the TUI is running:
 - **`k` / `↑`** - Select previous profile
 - **`s` / `Enter`** - Sync the selected profile (creates symlinks)
 - **`d`** - Dry run (preview changes without applying)
+- **`R`** - Reload configuration file
 - **`r`** - Enter restore mode
 - **`q` / `Esc`** - Quit the application
 
@@ -149,6 +151,7 @@ Once the TUI is running:
 4. **Preview changes** - Press `d` for a dry run
 5. **Apply changes** - Press `s` to sync the selected profile
 6. **Review logs** - Check the log panel for operation details
+7. **Reload config** - Press `R` to reload config.toml after making changes (no restart needed)
 
 #### Restore Workflow (TUI)
 1. **Enter restore mode** - Press `r` from the main view
@@ -206,6 +209,23 @@ alias dots-list='tui-dotfile-manager -l'
    - If it's a regular file/directory, back it up with a timestamp
 4. **Symlink Creation**: Creates symlinks from your repo to target locations
 5. **Logging**: All operations are logged in the TUI
+
+### Configuration Reload
+1. **Edit Config**: Modify `config.toml` while the application is running
+   - Add/remove profiles
+   - Update profile links
+   - Change settings paths
+2. **Trigger Reload**: Press `R` in the TUI (sync mode only)
+3. **Validation**: The new configuration is parsed and validated
+4. **Update UI**: Profile list updates immediately
+5. **Smart Selection**: 
+   - If the currently selected profile still exists, it remains selected
+   - If the selected profile was removed, switches to the first available profile
+   - If all profiles are removed, no profile is selected
+6. **Error Handling**: Invalid configurations are rejected gracefully
+   - Shows error message in the log panel
+   - Maintains the previous valid configuration
+7. **Operation Blocking**: Reload is prevented during active sync/restore operations
 
 ### Restore Operation
 1. **Backup Discovery**: Scans the backup directory for backed-up files
@@ -298,7 +318,7 @@ cargo fmt
 ## Future Enhancements
 
 - [x] Restore from backup functionality in TUI ✅ **Completed**
-- [ ] Configuration reload without restart
+- [x] Configuration reload without restart ✅ **Completed**
 - [ ] Progress indicators for large sync operations
 - [ ] Diff preview before syncing
 - [ ] Backup compression

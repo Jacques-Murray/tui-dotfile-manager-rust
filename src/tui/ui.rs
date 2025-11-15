@@ -124,6 +124,13 @@ fn render_sync_help(f: &mut Frame, app: &App, area: Rect) {
             ),
             Span::raw("Dry Run"),
             Span::styled(
+                "  (R) ",
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw("Reload Config"),
+            Span::styled(
                 "  (r) ",
                 Style::default()
                     .fg(Color::Cyan)
