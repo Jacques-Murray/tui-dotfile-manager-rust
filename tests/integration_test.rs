@@ -747,3 +747,274 @@ links = [
 
     Ok(())
 }
+
+// ============================================================================
+// Configuration reload tests
+// ============================================================================
+
+#[test]
+fn test_reload_config_with_new_profile() -> Result<(), Box<dyn std::error::Error>> {
+    // Test reloading configuration with a new profile added
+    let temp = assert_fs::TempDir::new()?;
+    let config_path = temp.child("config.toml");
+    let repo_dir = temp.child("dotfiles");
+
+    // Create initial config with one profile
+    let initial_config = format!(
+        r#"
+[settings]
+repo_dir = "{}"
+backup_dir = "backups"
+
+[profiles.profile1]
+links = [
+    {{ source = ".bashrc", target = "~/.bashrc" }}
+]
+"#,
+        repo_dir.path().display()
+    );
+    config_path.write_str(&initial_config)?;
+
+    let mut manager = DotfileManager::new(config_path.path())?;
+    let profiles = manager.get_profiles();
+    assert_eq!(profiles, vec!["profile1"]);
+
+    // Update config with a second profile
+    let updated_config = format!(
+        r#"
+[settings]
+repo_dir = "{}"
+backup_dir = "backups"
+
+[profiles.profile1]
+links = [
+    {{ source = ".bashrc", target = "~/.bashrc" }}
+]
+
+[profiles.profile2]
+links = [
+    {{ source = ".vimrc", target = "~/.vimrc" }}
+]
+"#,
+        repo_dir.path().display()
+    );
+    config_path.write_str(&updated_config)?;
+
+    // Reload the configuration
+    manager.reload_config(config_path.path())?;
+
+    // Verify both profiles are now available
+    let profiles = manager.get_profiles();
+    assert_eq!(profiles, vec!["profile1", "profile2"]);
+
+    Ok(())
+}
+
+#[test]
+fn test_reload_config_with_removed_profile() -> Result<(), Box<dyn std::error::Error>> {
+    // Test reloading configuration with a profile removed
+    let temp = assert_fs::TempDir::new()?;
+    let config_path = temp.child("config.toml");
+    let repo_dir = temp.child("dotfiles");
+
+    // Create initial config with two profiles
+    let initial_config = format!(
+        r#"
+[settings]
+repo_dir = "{}"
+backup_dir = "backups"
+
+[profiles.profile1]
+links = [
+    {{ source = ".bashrc", target = "~/.bashrc" }}
+]
+
+[profiles.profile2]
+links = [
+    {{ source = ".vimrc", target = "~/.vimrc" }}
+]
+"#,
+        repo_dir.path().display()
+    );
+    config_path.write_str(&initial_config)?;
+
+    let mut manager = DotfileManager::new(config_path.path())?;
+    let profiles = manager.get_profiles();
+    assert_eq!(profiles, vec!["profile1", "profile2"]);
+
+    // Update config with only one profile
+    let updated_config = format!(
+        r#"
+[settings]
+repo_dir = "{}"
+backup_dir = "backups"
+
+[profiles.profile2]
+links = [
+    {{ source = ".vimrc", target = "~/.vimrc" }}
+]
+"#,
+        repo_dir.path().display()
+    );
+    config_path.write_str(&updated_config)?;
+
+    // Reload the configuration
+    manager.reload_config(config_path.path())?;
+
+    // Verify only profile2 is now available
+    let profiles = manager.get_profiles();
+    assert_eq!(profiles, vec!["profile2"]);
+
+    Ok(())
+}
+
+#[test]
+fn test_reload_config_invalid_toml() -> Result<(), Box<dyn std::error::Error>> {
+    // Test that reload fails gracefully with invalid TOML
+    let temp = assert_fs::TempDir::new()?;
+    let config_path = temp.child("config.toml");
+    let repo_dir = temp.child("dotfiles");
+
+    // Create initial valid config
+    let initial_config = format!(
+        r#"
+[settings]
+repo_dir = "{}"
+backup_dir = "backups"
+
+[profiles.profile1]
+links = [
+    {{ source = ".bashrc", target = "~/.bashrc" }}
+]
+"#,
+        repo_dir.path().display()
+    );
+    config_path.write_str(&initial_config)?;
+
+    let mut manager = DotfileManager::new(config_path.path())?;
+    let profiles = manager.get_profiles();
+    assert_eq!(profiles, vec!["profile1"]);
+
+    // Write invalid TOML
+    config_path.write_str("this is not valid toml {")?;
+
+    // Reload should fail
+    let result = manager.reload_config(config_path.path());
+    assert!(result.is_err());
+
+    // Original profiles should still be available (no change on error)
+    let profiles = manager.get_profiles();
+    assert_eq!(profiles, vec!["profile1"]);
+
+    Ok(())
+}
+
+#[test]
+fn test_reload_config_validation_error() -> Result<(), Box<dyn std::error::Error>> {
+    // Test that reload fails gracefully with validation errors
+    let temp = assert_fs::TempDir::new()?;
+    let config_path = temp.child("config.toml");
+    let repo_dir = temp.child("dotfiles");
+
+    // Create initial valid config
+    let initial_config = format!(
+        r#"
+[settings]
+repo_dir = "{}"
+backup_dir = "backups"
+
+[profiles.profile1]
+links = [
+    {{ source = ".bashrc", target = "~/.bashrc" }}
+]
+"#,
+        repo_dir.path().display()
+    );
+    config_path.write_str(&initial_config)?;
+
+    let mut manager = DotfileManager::new(config_path.path())?;
+
+    // Write config with empty profile (fails validation)
+    let invalid_config = format!(
+        r#"
+[settings]
+repo_dir = "{}"
+backup_dir = "backups"
+
+[profiles.empty]
+links = []
+"#,
+        repo_dir.path().display()
+    );
+    config_path.write_str(&invalid_config)?;
+
+    // Reload should fail due to validation
+    let result = manager.reload_config(config_path.path());
+    assert!(result.is_err());
+    if let Err(e) = result {
+        assert!(e.to_string().contains("no links"));
+    }
+
+    // Original profiles should still be available
+    let profiles = manager.get_profiles();
+    assert_eq!(profiles, vec!["profile1"]);
+
+    Ok(())
+}
+
+#[test]
+fn test_reload_config_changed_settings() -> Result<(), Box<dyn std::error::Error>> {
+    // Test that reloading updates settings paths
+    let temp = assert_fs::TempDir::new()?;
+    let config_path = temp.child("config.toml");
+    let repo_dir1 = temp.child("dotfiles1");
+    let repo_dir2 = temp.child("dotfiles2");
+    let backup_dir1 = temp.child("backups1");
+    let backup_dir2 = temp.child("backups2");
+
+    // Create initial config
+    let initial_config = format!(
+        r#"
+[settings]
+repo_dir = "{}"
+backup_dir = "{}"
+
+[profiles.test]
+links = [
+    {{ source = ".bashrc", target = "~/.bashrc" }}
+]
+"#,
+        repo_dir1.path().display(),
+        backup_dir1.path().display()
+    );
+    config_path.write_str(&initial_config)?;
+
+    let mut manager = DotfileManager::new(config_path.path())?;
+
+    // Update config with different paths
+    let updated_config = format!(
+        r#"
+[settings]
+repo_dir = "{}"
+backup_dir = "{}"
+
+[profiles.test]
+links = [
+    {{ source = ".bashrc", target = "~/.bashrc" }}
+]
+"#,
+        repo_dir2.path().display(),
+        backup_dir2.path().display()
+    );
+    config_path.write_str(&updated_config)?;
+
+    // Reload the configuration
+    manager.reload_config(config_path.path())?;
+
+    // The settings should be updated (we can't directly check private fields,
+    // but at least verify it doesn't error)
+    let profiles = manager.get_profiles();
+    assert_eq!(profiles, vec!["test"]);
+
+    Ok(())
+}

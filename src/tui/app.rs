@@ -5,7 +5,8 @@ use crate::core::restore::BackupEntry;
 use crate::core::DotfileManager;
 use crossterm::event::KeyCode;
 use std::collections::VecDeque;
-use std::sync::{mpsc, Arc};
+use std::path::PathBuf;
+use std::sync::{mpsc, Arc, RwLock};
 use std::thread;
 
 /// Maximum number of log messages to keep in memory.
@@ -35,7 +36,8 @@ pub enum WorkerMessage {
 /// log messages, and sync status. It handles user input and coordinates with
 /// background worker threads for I/O operations.
 pub struct App {
-    pub manager: Arc<DotfileManager>,
+    pub manager: Arc<RwLock<DotfileManager>>,
+    pub config_path: PathBuf,
     pub profiles: Vec<String>,
     pub selected_profile: Option<usize>,
     pub logs: VecDeque<String>,
@@ -53,22 +55,28 @@ impl App {
     ///
     /// # Arguments
     /// * `manager` - Shared reference to the DotfileManager
+    /// * `config_path` - Path to the configuration file for reloading
     /// * `log_tx` - Channel sender for receiving log messages from worker threads
     ///
     /// # Returns
     /// A new App instance with initial welcome messages and the first profile selected.
-    pub fn new(manager: Arc<DotfileManager>, log_tx: mpsc::Sender<WorkerMessage>) -> Self {
-        let profiles = manager.get_profiles();
+    pub fn new(
+        manager: Arc<RwLock<DotfileManager>>,
+        config_path: PathBuf,
+        log_tx: mpsc::Sender<WorkerMessage>,
+    ) -> Self {
+        let profiles = manager.read().unwrap().get_profiles();
         let selected_profile = if profiles.is_empty() { None } else { Some(0) };
 
         Self {
             manager,
+            config_path,
             profiles,
             selected_profile,
             logs: VecDeque::from([
                 "Welcome to the TUI Dotfile Manager!".to_string(),
                 "Use 'j'/'k' or Arrow Up/Down to select a profile.".to_string(),
-                "'s' = Sync, 'd' = Dry Run, 'r' = Restore Mode, 'q' = Quit.".to_string(),
+                "'s' = Sync, 'd' = Dry Run, 'R' = Reload Config, 'r' = Restore Mode, 'q' = Quit.".to_string(),
             ]),
             should_quit: false,
             sync_in_progress: false,
@@ -118,6 +126,7 @@ impl App {
             KeyCode::Char('k') | KeyCode::Up => self.select_previous_profile(),
             KeyCode::Char('d') => self.start_sync(true),
             KeyCode::Char('s') | KeyCode::Enter => self.start_sync(false),
+            KeyCode::Char('R') => self.reload_config(),
             KeyCode::Char('r') => self.enter_restore_mode(),
             _ => {}
         }
@@ -210,18 +219,24 @@ impl App {
         let log_tx = self.log_tx.clone();
 
         // Spawn a thread to list backups
-        thread::spawn(move || match manager.list_backups() {
-            Ok(backups) => {
-                log_tx.send(WorkerMessage::BackupsListed(backups)).ok();
-            }
-            Err(e) => {
-                log_tx
-                    .send(WorkerMessage::Log(format!(
-                        "[ERROR] Failed to list backups: {}",
-                        e
-                    )))
-                    .ok();
-                log_tx.send(WorkerMessage::BackupsListed(Vec::new())).ok();
+        thread::spawn(move || {
+            let result = {
+                let manager_read = manager.read().unwrap();
+                manager_read.list_backups()
+            };
+            match result {
+                Ok(backups) => {
+                    log_tx.send(WorkerMessage::BackupsListed(backups)).ok();
+                }
+                Err(e) => {
+                    log_tx
+                        .send(WorkerMessage::Log(format!(
+                            "[ERROR] Failed to list backups: {}",
+                            e
+                        )))
+                        .ok();
+                    log_tx.send(WorkerMessage::BackupsListed(Vec::new())).ok();
+                }
             }
         });
     }
@@ -233,6 +248,90 @@ impl App {
         self.selected_backup = None;
         self.logs.push_back("---".to_string());
         self.logs.push_back("Exited Restore Mode".to_string());
+    }
+
+    /// Reloads the configuration file and updates the profile list.
+    ///
+    /// This method:
+    /// - Re-reads and parses the config file
+    /// - Updates the profile list
+    /// - Adjusts profile selection if needed
+    /// - Provides user feedback
+    /// - Handles errors gracefully without crashing
+    fn reload_config(&mut self) {
+        if self.sync_in_progress {
+            self.logs.push_back("---".to_string());
+            self.logs
+                .push_back("[WARN] Cannot reload config during sync.".to_string());
+            return;
+        }
+
+        if self.restore_in_progress {
+            self.logs.push_back("---".to_string());
+            self.logs
+                .push_back("[WARN] Cannot reload config during restore.".to_string());
+            return;
+        }
+
+        self.logs.push_back("---".to_string());
+        self.logs
+            .push_back("Reloading configuration...".to_string());
+
+        // Attempt to reload the configuration
+        let result = {
+            let mut manager = self.manager.write().unwrap();
+            manager.reload_config(&self.config_path)
+        };
+
+        match result {
+            Ok(()) => {
+                // Update profile list
+                let old_profiles = std::mem::take(&mut self.profiles);
+                self.profiles = self.manager.read().unwrap().get_profiles();
+
+                // Handle selection adjustment
+                let old_selected_name = self
+                    .selected_profile
+                    .and_then(|idx| old_profiles.get(idx))
+                    .cloned();
+
+                if let Some(old_name) = old_selected_name {
+                    // Try to find the previously selected profile in the new list
+                    self.selected_profile = self
+                        .profiles
+                        .iter()
+                        .position(|name| name == &old_name)
+                        .or_else(|| {
+                            if !self.profiles.is_empty() {
+                                self.logs.push_back(format!(
+                                    "[INFO] Profile '{}' no longer exists. Switched to '{}'.",
+                                    old_name, self.profiles[0]
+                                ));
+                                Some(0)
+                            } else {
+                                None
+                            }
+                        });
+                } else if !self.profiles.is_empty() {
+                    self.selected_profile = Some(0);
+                } else {
+                    self.selected_profile = None;
+                }
+
+                // Success message
+                self.logs.push_back(format!(
+                    "[SUCCESS] Configuration reloaded. {} profile(s) available.",
+                    self.profiles.len()
+                ));
+            }
+            Err(e) => {
+                // Error handling - don't crash, just log the error
+                self.logs
+                    .push_back(format!("[ERROR] Failed to reload configuration: {}", e));
+                self.logs
+                    .push_back("[INFO] Using previous configuration.".to_string());
+            }
+        }
     }
 
     /// Spawns a worker thread to perform the sync.
@@ -261,7 +360,11 @@ impl App {
 
             // Spawn the blocking I/O in a separate thread
             thread::spawn(move || {
-                match manager.execute_sync(&profile_name, dry_run) {
+                let result = {
+                    let manager_read = manager.read().unwrap();
+                    manager_read.execute_sync(&profile_name, dry_run)
+                };
+                match result {
                     Ok(logs) => {
                         for log in logs {
                             log_tx.send(WorkerMessage::Log(log)).ok();
@@ -318,7 +421,11 @@ impl App {
 
             // Spawn the blocking I/O in a separate thread
             thread::spawn(move || {
-                match manager.restore_backup(&backup, dry_run) {
+                let result = {
+                    let manager_read = manager.read().unwrap();
+                    manager_read.restore_backup(&backup, dry_run)
+                };
+                match result {
                     Ok(logs) => {
                         for log in logs {
                             log_tx.send(WorkerMessage::Log(log)).ok();
@@ -364,33 +471,39 @@ impl App {
 
             // Spawn the blocking I/O in a separate thread
             thread::spawn(move || {
-                match manager.delete_backup(&backup) {
-                    Ok(()) => {
-                        log_tx
-                            .send(WorkerMessage::Log("[SUCCESS] Backup deleted".to_string()))
-                            .ok();
-                    }
-                    Err(e) => {
-                        log_tx
-                            .send(WorkerMessage::Log(format!(
-                                "[ERROR] Failed to delete backup: {}",
-                                e
-                            )))
-                            .ok();
+                {
+                    let manager_read = manager.read().unwrap();
+                    match manager_read.delete_backup(&backup) {
+                        Ok(()) => {
+                            log_tx
+                                .send(WorkerMessage::Log("[SUCCESS] Backup deleted".to_string()))
+                                .ok();
+                        }
+                        Err(e) => {
+                            log_tx
+                                .send(WorkerMessage::Log(format!(
+                                    "[ERROR] Failed to delete backup: {}",
+                                    e
+                                )))
+                                .ok();
+                        }
                     }
                 }
                 // Refresh the backup list after deletion
-                match manager.list_backups() {
-                    Ok(backups) => {
-                        log_tx.send(WorkerMessage::BackupsListed(backups)).ok();
-                    }
-                    Err(e) => {
-                        log_tx
-                            .send(WorkerMessage::Log(format!(
-                                "[ERROR] Failed to refresh backup list: {}",
-                                e
-                            )))
-                            .ok();
+                {
+                    let manager_read = manager.read().unwrap();
+                    match manager_read.list_backups() {
+                        Ok(backups) => {
+                            log_tx.send(WorkerMessage::BackupsListed(backups)).ok();
+                        }
+                        Err(e) => {
+                            log_tx
+                                .send(WorkerMessage::Log(format!(
+                                    "[ERROR] Failed to refresh backup list: {}",
+                                    e
+                                )))
+                                .ok();
+                        }
                     }
                 }
             });

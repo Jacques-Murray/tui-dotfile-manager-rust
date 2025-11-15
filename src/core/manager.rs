@@ -75,6 +75,60 @@ impl DotfileManager {
         })
     }
 
+    /// Reloads the configuration from the specified file.
+    ///
+    /// This method re-reads and re-parses the configuration file, updating
+    /// all internal state including profiles, repo_path, and backup_path.
+    ///
+    /// # Arguments
+    /// * `config_path` - Path to the TOML configuration file
+    ///
+    /// # Errors
+    /// Returns an error if:
+    /// - The configuration file doesn't exist
+    /// - The file cannot be read
+    /// - The TOML is invalid
+    /// - The configuration fails validation
+    ///
+    /// # Example
+    /// ```no_run
+    /// # use std::path::Path;
+    /// # use tui_dotfile_manager::DotfileManager;
+    /// # let mut manager = DotfileManager::new(Path::new("config.toml"))?;
+    /// manager.reload_config(Path::new("config.toml"))?;
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    pub fn reload_config(&mut self, config_path: &Path) -> Result<(), ManagerError> {
+        if !config_path.exists() {
+            return Err(ManagerError::ConfigNotFound(config_path.to_path_buf()));
+        }
+
+        let config_str = fs::read_to_string(config_path)?;
+        let config: Config = toml::from_str(&config_str)?;
+
+        // Validate configuration
+        if let Err(e) = config.validate() {
+            return Err(ManagerError::ConfigValidation(e));
+        }
+
+        let config_dir = config_path
+            .parent()
+            .unwrap_or_else(|| Path::new("."))
+            .to_path_buf();
+
+        // Resolve paths relative to the config file or home dir
+        let repo_path = Self::resolve_path(&config_dir, &config.settings.repo_dir);
+        let backup_path = Self::resolve_path(&config_dir, &config.settings.backup_dir);
+
+        // Update internal state
+        self.config = config;
+        self.repo_path = repo_path;
+        self.backup_path = backup_path;
+        self.config_dir = config_dir;
+
+        Ok(())
+    }
+
     /// Returns a sorted list of available profile names.
     ///
     /// Profile names are sorted alphabetically for consistent display
