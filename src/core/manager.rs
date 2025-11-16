@@ -76,6 +76,60 @@ impl DotfileManager {
         })
     }
 
+    /// Reloads the configuration from the specified file.
+    ///
+    /// This method re-reads and re-parses the configuration file, updating
+    /// all internal state including profiles, repo_path, and backup_path.
+    ///
+    /// # Arguments
+    /// * `config_path` - Path to the TOML configuration file
+    ///
+    /// # Errors
+    /// Returns an error if:
+    /// - The configuration file doesn't exist
+    /// - The file cannot be read
+    /// - The TOML is invalid
+    /// - The configuration fails validation
+    ///
+    /// # Example
+    /// ```no_run
+    /// # use std::path::Path;
+    /// # use tui_dotfile_manager::DotfileManager;
+    /// # let mut manager = DotfileManager::new(Path::new("config.toml"))?;
+    /// manager.reload_config(Path::new("config.toml"))?;
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    pub fn reload_config(&mut self, config_path: &Path) -> Result<(), ManagerError> {
+        if !config_path.exists() {
+            return Err(ManagerError::ConfigNotFound(config_path.to_path_buf()));
+        }
+
+        let config_str = fs::read_to_string(config_path)?;
+        let config: Config = toml::from_str(&config_str)?;
+
+        // Validate configuration
+        if let Err(e) = config.validate() {
+            return Err(ManagerError::ConfigValidation(e));
+        }
+
+        let config_dir = config_path
+            .parent()
+            .unwrap_or_else(|| Path::new("."))
+            .to_path_buf();
+
+        // Resolve paths relative to the config file or home dir
+        let repo_path = Self::resolve_path(&config_dir, &config.settings.repo_dir);
+        let backup_path = Self::resolve_path(&config_dir, &config.settings.backup_dir);
+
+        // Update internal state
+        self.config = config;
+        self.repo_path = repo_path;
+        self.backup_path = backup_path;
+        self.config_dir = config_dir;
+
+        Ok(())
+    }
+
     /// Returns a sorted list of available profile names.
     ///
     /// Profile names are sorted alphabetically for consistent display
@@ -96,6 +150,21 @@ impl DotfileManager {
         profiles
     }
 
+    /// Returns the number of links for a given profile.
+    ///
+    /// # Arguments
+    /// * `profile_name` - Name of the profile
+    ///
+    /// # Returns
+    /// The number of links in the profile, or 0 if the profile doesn't exist.
+    pub fn get_profile_link_count(&self, profile_name: &str) -> usize {
+        self.config
+            .profiles
+            .get(profile_name)
+            .map(|p| p.links.len())
+            .unwrap_or(0)
+    }
+
     /// Executes the sync, either for real or as a dry run.
     /// Returns a list of log messages.
     pub fn execute_sync(
@@ -103,6 +172,25 @@ impl DotfileManager {
         profile_name: &str,
         dry_run: bool,
     ) -> Result<Vec<String>, ManagerError> {
+        self.execute_sync_with_progress(profile_name, dry_run, |_, _, _| {})
+    }
+
+    /// Executes the sync with progress reporting, either for real or as a dry run.
+    /// Returns a list of log messages.
+    ///
+    /// # Arguments
+    /// * `profile_name` - Name of the profile to sync
+    /// * `dry_run` - If true, only simulates changes without applying them
+    /// * `progress_callback` - Function called for each file processed: (current, total, filename)
+    pub fn execute_sync_with_progress<F>(
+        &self,
+        profile_name: &str,
+        dry_run: bool,
+        progress_callback: F,
+    ) -> Result<Vec<String>, ManagerError>
+    where
+        F: Fn(usize, usize, &str),
+    {
         let mut logs = Vec::new();
 
         if dry_run {
@@ -121,16 +209,24 @@ impl DotfileManager {
             .get(profile_name)
             .ok_or_else(|| ManagerError::ProfileNotFound(profile_name.to_string()))?;
 
-        for link in &profile.links {
+        let total_files = profile.links.len();
+
+        for (index, link) in profile.links.iter().enumerate() {
             let source = Self::resolve_path(&self.repo_path, &link.source);
             let target = Self::resolve_path(&self.config_dir, &link.target);
 
+            let current_file = source
+                .strip_prefix(&self.repo_path)
+                .unwrap_or(&source)
+                .display()
+                .to_string();
+
+            // Report progress
+            progress_callback(index + 1, total_files, &current_file);
+
             logs.push(format!(
                 "Processing: {} -> {}",
-                source
-                    .strip_prefix(&self.repo_path)
-                    .unwrap_or(&source)
-                    .display(),
+                current_file,
                 target.display()
             ));
 

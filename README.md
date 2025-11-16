@@ -8,6 +8,7 @@ A terminal-based user interface (TUI) application for managing dotfiles using sy
 - 🔗 **Symlink Creation** - Automatically create symlinks from your dotfile repository to target locations
 - 💾 **Automatic Backups** - Backs up existing files before replacing them with symlinks
 - 🔄 **Restore from Backups** - Browse, preview, and restore backed-up files directly from the TUI
+- 🔃 **Configuration Reload** - Reload config.toml without restarting the application (press `R`)
 - 🔍 **Dry Run Mode** - Preview changes before applying them (TUI and CLI)
 - 📊 **Diff Preview** - View file content differences before syncing (NEW!)
 - 🎨 **Interactive TUI** - Easy-to-use terminal interface for profile selection and sync operations
@@ -158,6 +159,7 @@ Once the TUI is running:
 4. **Preview changes** - Press `d` for a dry run or `p` for diff preview
 5. **Apply changes** - Press `s` to sync the selected profile
 6. **Review logs** - Check the log panel for operation details
+7. **Reload config** - Press `R` to reload config.toml after making changes (no restart needed)
 
 #### Diff Preview Workflow (TUI)
 1. **Select a profile** - Navigate to the profile you want to preview
