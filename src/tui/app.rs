@@ -32,6 +32,16 @@ pub enum WorkerMessage {
     RestoreComplete,
     BackupsListed(Vec<BackupEntry>),
     DiffGenerated(Vec<DiffResult>),
+    SyncStarted { total_files: usize },
+    Progress { current: usize, total: usize, file: String },
+}
+
+/// Tracks sync progress for UI display.
+#[derive(Debug, Clone)]
+pub struct SyncProgress {
+    pub current: usize,
+    pub total: usize,
+    pub current_file: String,
 }
 
 /// Represents the TUI's state and logic.
@@ -574,18 +584,34 @@ impl App {
             let log_tx = self.log_tx.clone();
 
             // Spawn a thread to generate diffs
-            thread::spawn(move || match manager.preview_diff(&profile_name) {
-                Ok(diffs) => {
-                    log_tx.send(WorkerMessage::DiffGenerated(diffs)).ok();
-                }
-                Err(e) => {
-                    log_tx
-                        .send(WorkerMessage::Log(format!(
-                            "[ERROR] Failed to generate diff: {}",
-                            e
-                        )))
-                        .ok();
-                    log_tx.send(WorkerMessage::DiffGenerated(Vec::new())).ok();
+            thread::spawn(move || {
+                let manager_guard = match manager.read() {
+                    Ok(guard) => guard,
+                    Err(e) => {
+                        log_tx
+                            .send(WorkerMessage::Log(format!(
+                                "[ERROR] Failed to acquire manager lock: {}",
+                                e
+                            )))
+                            .ok();
+                        log_tx.send(WorkerMessage::DiffGenerated(Vec::new())).ok();
+                        return;
+                    }
+                };
+
+                match manager_guard.preview_diff(&profile_name) {
+                    Ok(diffs) => {
+                        log_tx.send(WorkerMessage::DiffGenerated(diffs)).ok();
+                    }
+                    Err(e) => {
+                        log_tx
+                            .send(WorkerMessage::Log(format!(
+                                "[ERROR] Failed to generate diff: {}",
+                                e
+                            )))
+                            .ok();
+                        log_tx.send(WorkerMessage::DiffGenerated(Vec::new())).ok();
+                    }
                 }
             });
         } else {
@@ -680,6 +706,20 @@ impl App {
                 self.diffs = diffs;
                 self.selected_diff = if count > 0 { Some(0) } else { None };
                 self.logs.push_back(format!("Generated {} diff(s)", count));
+            }
+            WorkerMessage::SyncStarted { total_files } => {
+                self.sync_progress = Some(SyncProgress {
+                    current: 0,
+                    total: total_files,
+                    current_file: String::new(),
+                });
+            }
+            WorkerMessage::Progress { current, total, file } => {
+                self.sync_progress = Some(SyncProgress {
+                    current,
+                    total,
+                    current_file: file,
+                });
             }
         }
     }
