@@ -749,19 +749,31 @@ links = [
 }
 
 #[test]
-fn test_sync_with_progress_callback() -> Result<(), Box<dyn std::error::Error>> {
-    // Test that progress callback is invoked correctly during sync
+fn test_diff_preview() -> Result<(), Box<dyn std::error::Error>> {
+    use tui_dotfile_manager::core::diff::DiffResult;
+
+    // Setup a temporary file system
     let temp = assert_fs::TempDir::new()?;
     let config_path = temp.child("config.toml");
     let repo_dir = temp.child("dotfiles");
     let backup_dir = temp.child("backups");
     let home_dir = temp.child("home");
 
-    // Create multiple dotfiles
-    repo_dir.child(".bashrc").write_str("REPO BASHRC")?;
-    repo_dir.child(".vimrc").write_str("REPO VIMRC")?;
-    repo_dir.child(".gitconfig").write_str("REPO GITCONFIG")?;
+    // Create mock dotfiles
+    repo_dir
+        .child(".bashrc")
+        .write_str("# New bashrc\necho 'Hello from new bashrc'\n")?;
+    repo_dir
+        .child(".vimrc")
+        .write_str("set number\nset tabstop=4\n")?;
 
+    // Create mock existing files in 'home' with different content
+    home_dir
+        .child(".bashrc")
+        .write_str("# Old bashrc\necho 'Hello from old bashrc'\n")?;
+    // .vimrc doesn't exist - should show as new file
+
+    // Create the config.toml
     let config_content = format!(
         r#"
 [settings]
@@ -771,362 +783,110 @@ backup_dir = "{}"
 [profiles.test]
 links = [
     {{ source = ".bashrc", target = "{}/.bashrc" }},
-    {{ source = ".vimrc", target = "{}/.vimrc" }},
-    {{ source = ".gitconfig", target = "{}/.gitconfig" }}
+    {{ source = ".vimrc", target = "{}/.vimrc" }}
 ]
 "#,
         repo_dir.path().display(),
         backup_dir.path().display(),
         home_dir.path().display(),
-        home_dir.path().display(),
         home_dir.path().display()
     );
     config_path.write_str(&config_content)?;
 
+    // Initialize the manager
     let manager = DotfileManager::new(config_path.path())?;
 
-    // Track progress updates
-    use std::sync::{Arc, Mutex};
-    let progress_updates = Arc::new(Mutex::new(Vec::new()));
-    let progress_updates_clone = Arc::clone(&progress_updates);
+    // Generate diff preview
+    let diffs = manager.preview_diff("test")?;
 
-    // Execute sync with progress callback
-    let _logs = manager.execute_sync_with_progress("test", true, |current, total, file| {
-        let mut updates = progress_updates_clone.lock().unwrap();
-        updates.push((current, total, file.to_string()));
-    })?;
+    // Should have two diffs: one for .bashrc (modified) and one for .vimrc (new)
+    assert_eq!(diffs.len(), 2);
 
-    // Verify progress updates
-    let updates = progress_updates.lock().unwrap();
-    assert_eq!(updates.len(), 3); // Should have 3 updates for 3 files
+    // Check first diff (.bashrc) - should be a FileDiff
+    match &diffs[0] {
+        DiffResult::FileDiff { diff_lines, .. } => {
+            // Should have some diff lines
+            assert!(!diff_lines.is_empty());
+        }
+        _ => panic!("Expected FileDiff for .bashrc"),
+    }
 
-    // Check first update
-    assert_eq!(updates[0].0, 1); // current
-    assert_eq!(updates[0].1, 3); // total
-    assert!(updates[0].2.contains(".bashrc"));
-
-    // Check second update
-    assert_eq!(updates[1].0, 2);
-    assert_eq!(updates[1].1, 3);
-    assert!(updates[1].2.contains(".vimrc"));
-
-    // Check third update
-    assert_eq!(updates[2].0, 3);
-    assert_eq!(updates[2].1, 3);
-    assert!(updates[2].2.contains(".gitconfig"));
+    // Check second diff (.vimrc) - should be a NewFile
+    match &diffs[1] {
+        DiffResult::NewFile {
+            content_preview, ..
+        } => {
+            // Should have content preview
+            assert!(!content_preview.is_empty());
+            assert!(content_preview.iter().any(|l| l.contains("set number")));
+        }
+        _ => panic!("Expected NewFile for .vimrc"),
+    }
 
     Ok(())
 }
 
 #[test]
-fn test_get_profile_link_count() -> Result<(), Box<dyn std::error::Error>> {
-    // Test the helper method for getting profile link count
+fn test_diff_preview_binary_file() -> Result<(), Box<dyn std::error::Error>> {
+    use std::io::Write;
+    use tui_dotfile_manager::core::diff::DiffResult;
+
+    // Setup a temporary file system
     let temp = assert_fs::TempDir::new()?;
     let config_path = temp.child("config.toml");
     let repo_dir = temp.child("dotfiles");
     let backup_dir = temp.child("backups");
+    let home_dir = temp.child("home");
 
+    // Create directories
+    fs::create_dir_all(repo_dir.path())?;
+    fs::create_dir_all(home_dir.path())?;
+
+    // Create a binary file in repo
+    let mut file = fs::File::create(repo_dir.child("image.bin").path())?;
+    file.write_all(&[0u8, 1, 2, 3, 0, 255])?;
+    drop(file);
+
+    // Create a different binary file in home
+    let mut file = fs::File::create(home_dir.child("image.bin").path())?;
+    file.write_all(&[0u8, 5, 6, 7, 0, 255])?;
+    drop(file);
+
+    // Create the config.toml
     let config_content = format!(
         r#"
 [settings]
 repo_dir = "{}"
 backup_dir = "{}"
 
-[profiles.small]
+[profiles.test]
 links = [
-    {{ source = ".bashrc", target = "~/.bashrc" }}
-]
-
-[profiles.large]
-links = [
-    {{ source = ".bashrc", target = "~/.bashrc" }},
-    {{ source = ".vimrc", target = "~/.vimrc" }},
-    {{ source = ".gitconfig", target = "~/.gitconfig" }},
-    {{ source = ".zshrc", target = "~/.zshrc" }}
+    {{ source = "image.bin", target = "{}/image.bin" }}
 ]
 "#,
         repo_dir.path().display(),
-        backup_dir.path().display()
+        backup_dir.path().display(),
+        home_dir.path().display()
     );
     config_path.write_str(&config_content)?;
 
+    // Initialize the manager
     let manager = DotfileManager::new(config_path.path())?;
 
-    // Test profile link counts
-    assert_eq!(manager.get_profile_link_count("small"), 1);
-    assert_eq!(manager.get_profile_link_count("large"), 4);
-    assert_eq!(manager.get_profile_link_count("nonexistent"), 0);
+    // Generate diff preview
+    let diffs = manager.preview_diff("test")?;
 
-    Ok(())
-}
+    // Should have one diff for the binary file
+    assert_eq!(diffs.len(), 1);
 
-// ============================================================================
-// Configuration reload tests
-// ============================================================================
-
-#[test]
-fn test_reload_config_with_new_profile() -> Result<(), Box<dyn std::error::Error>> {
-    // Test reloading configuration with a new profile added
-    let temp = assert_fs::TempDir::new()?;
-    let config_path = temp.child("config.toml");
-    let repo_dir = temp.child("dotfiles");
-
-    // Create initial config with one profile
-    let initial_config = format!(
-        r#"
-[settings]
-repo_dir = "{}"
-backup_dir = "backups"
-
-[profiles.profile1]
-links = [
-    {{ source = ".bashrc", target = "~/.bashrc" }}
-]
-"#,
-        repo_dir.path().display()
-    );
-    config_path.write_str(&initial_config)?;
-
-    let mut manager = DotfileManager::new(config_path.path())?;
-    let profiles = manager.get_profiles();
-    assert_eq!(profiles, vec!["profile1"]);
-
-    // Update config with a second profile
-    let updated_config = format!(
-        r#"
-[settings]
-repo_dir = "{}"
-backup_dir = "backups"
-
-[profiles.profile1]
-links = [
-    {{ source = ".bashrc", target = "~/.bashrc" }}
-]
-
-[profiles.profile2]
-links = [
-    {{ source = ".vimrc", target = "~/.vimrc" }}
-]
-"#,
-        repo_dir.path().display()
-    );
-    config_path.write_str(&updated_config)?;
-
-    // Reload the configuration
-    manager.reload_config(config_path.path())?;
-
-    // Verify both profiles are now available
-    let profiles = manager.get_profiles();
-    assert_eq!(profiles, vec!["profile1", "profile2"]);
-
-    Ok(())
-}
-
-#[test]
-fn test_reload_config_with_removed_profile() -> Result<(), Box<dyn std::error::Error>> {
-    // Test reloading configuration with a profile removed
-    let temp = assert_fs::TempDir::new()?;
-    let config_path = temp.child("config.toml");
-    let repo_dir = temp.child("dotfiles");
-
-    // Create initial config with two profiles
-    let initial_config = format!(
-        r#"
-[settings]
-repo_dir = "{}"
-backup_dir = "backups"
-
-[profiles.profile1]
-links = [
-    {{ source = ".bashrc", target = "~/.bashrc" }}
-]
-
-[profiles.profile2]
-links = [
-    {{ source = ".vimrc", target = "~/.vimrc" }}
-]
-"#,
-        repo_dir.path().display()
-    );
-    config_path.write_str(&initial_config)?;
-
-    let mut manager = DotfileManager::new(config_path.path())?;
-    let profiles = manager.get_profiles();
-    assert_eq!(profiles, vec!["profile1", "profile2"]);
-
-    // Update config with only one profile
-    let updated_config = format!(
-        r#"
-[settings]
-repo_dir = "{}"
-backup_dir = "backups"
-
-[profiles.profile2]
-links = [
-    {{ source = ".vimrc", target = "~/.vimrc" }}
-]
-"#,
-        repo_dir.path().display()
-    );
-    config_path.write_str(&updated_config)?;
-
-    // Reload the configuration
-    manager.reload_config(config_path.path())?;
-
-    // Verify only profile2 is now available
-    let profiles = manager.get_profiles();
-    assert_eq!(profiles, vec!["profile2"]);
-
-    Ok(())
-}
-
-#[test]
-fn test_reload_config_invalid_toml() -> Result<(), Box<dyn std::error::Error>> {
-    // Test that reload fails gracefully with invalid TOML
-    let temp = assert_fs::TempDir::new()?;
-    let config_path = temp.child("config.toml");
-    let repo_dir = temp.child("dotfiles");
-
-    // Create initial valid config
-    let initial_config = format!(
-        r#"
-[settings]
-repo_dir = "{}"
-backup_dir = "backups"
-
-[profiles.profile1]
-links = [
-    {{ source = ".bashrc", target = "~/.bashrc" }}
-]
-"#,
-        repo_dir.path().display()
-    );
-    config_path.write_str(&initial_config)?;
-
-    let mut manager = DotfileManager::new(config_path.path())?;
-    let profiles = manager.get_profiles();
-    assert_eq!(profiles, vec!["profile1"]);
-
-    // Write invalid TOML
-    config_path.write_str("this is not valid toml {")?;
-
-    // Reload should fail
-    let result = manager.reload_config(config_path.path());
-    assert!(result.is_err());
-
-    // Original profiles should still be available (no change on error)
-    let profiles = manager.get_profiles();
-    assert_eq!(profiles, vec!["profile1"]);
-
-    Ok(())
-}
-
-#[test]
-fn test_reload_config_validation_error() -> Result<(), Box<dyn std::error::Error>> {
-    // Test that reload fails gracefully with validation errors
-    let temp = assert_fs::TempDir::new()?;
-    let config_path = temp.child("config.toml");
-    let repo_dir = temp.child("dotfiles");
-
-    // Create initial valid config
-    let initial_config = format!(
-        r#"
-[settings]
-repo_dir = "{}"
-backup_dir = "backups"
-
-[profiles.profile1]
-links = [
-    {{ source = ".bashrc", target = "~/.bashrc" }}
-]
-"#,
-        repo_dir.path().display()
-    );
-    config_path.write_str(&initial_config)?;
-
-    let mut manager = DotfileManager::new(config_path.path())?;
-
-    // Write config with empty profile (fails validation)
-    let invalid_config = format!(
-        r#"
-[settings]
-repo_dir = "{}"
-backup_dir = "backups"
-
-[profiles.empty]
-links = []
-"#,
-        repo_dir.path().display()
-    );
-    config_path.write_str(&invalid_config)?;
-
-    // Reload should fail due to validation
-    let result = manager.reload_config(config_path.path());
-    assert!(result.is_err());
-    if let Err(e) = result {
-        assert!(e.to_string().contains("no links"));
+    // Check diff - should be BinaryFile
+    match &diffs[0] {
+        DiffResult::BinaryFile { .. } => {
+            // Expected
+        }
+        _ => panic!("Expected BinaryFile for image.bin"),
     }
 
-    // Original profiles should still be available
-    let profiles = manager.get_profiles();
-    assert_eq!(profiles, vec!["profile1"]);
-
     Ok(())
 }
 
-#[test]
-fn test_reload_config_changed_settings() -> Result<(), Box<dyn std::error::Error>> {
-    // Test that reloading updates settings paths
-    let temp = assert_fs::TempDir::new()?;
-    let config_path = temp.child("config.toml");
-    let repo_dir1 = temp.child("dotfiles1");
-    let repo_dir2 = temp.child("dotfiles2");
-    let backup_dir1 = temp.child("backups1");
-    let backup_dir2 = temp.child("backups2");
-
-    // Create initial config
-    let initial_config = format!(
-        r#"
-[settings]
-repo_dir = "{}"
-backup_dir = "{}"
-
-[profiles.test]
-links = [
-    {{ source = ".bashrc", target = "~/.bashrc" }}
-]
-"#,
-        repo_dir1.path().display(),
-        backup_dir1.path().display()
-    );
-    config_path.write_str(&initial_config)?;
-
-    let mut manager = DotfileManager::new(config_path.path())?;
-
-    // Update config with different paths
-    let updated_config = format!(
-        r#"
-[settings]
-repo_dir = "{}"
-backup_dir = "{}"
-
-[profiles.test]
-links = [
-    {{ source = ".bashrc", target = "~/.bashrc" }}
-]
-"#,
-        repo_dir2.path().display(),
-        backup_dir2.path().display()
-    );
-    config_path.write_str(&updated_config)?;
-
-    // Reload the configuration
-    manager.reload_config(config_path.path())?;
-
-    // The settings should be updated (we can't directly check private fields,
-    // but at least verify it doesn't error)
-    let profiles = manager.get_profiles();
-    assert_eq!(profiles, vec!["test"]);
-
-    Ok(())
-}

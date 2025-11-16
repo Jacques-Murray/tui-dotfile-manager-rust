@@ -2,6 +2,7 @@
 //! The main DotfileManager struct and its associated logic.
 
 use super::config::Config;
+use super::diff::{generate_diff, DiffResult};
 use super::error::ManagerError;
 use super::restore::BackupEntry;
 use chrono::Local;
@@ -569,5 +570,35 @@ impl DotfileManager {
             fs::remove_file(&backup.backup_path)?;
         }
         Ok(())
+    }
+
+    /// Generates diff previews for all links in a profile.
+    ///
+    /// # Arguments
+    /// * `profile_name` - Name of the profile to preview
+    ///
+    /// # Returns
+    /// A vector of DiffResult for each link in the profile
+    ///
+    /// # Errors
+    /// Returns an error if the profile is not found
+    pub fn preview_diff(&self, profile_name: &str) -> Result<Vec<DiffResult>, ManagerError> {
+        let profile = self
+            .config
+            .profiles
+            .get(profile_name)
+            .ok_or_else(|| ManagerError::ProfileNotFound(profile_name.to_string()))?;
+
+        let mut results = Vec::new();
+
+        for link in &profile.links {
+            let source = Self::resolve_path(&self.repo_path, &link.source);
+            let target = Self::resolve_path(&self.config_dir, &link.target);
+
+            let diff = generate_diff(&source, &target);
+            results.push(diff);
+        }
+
+        Ok(results)
     }
 }
