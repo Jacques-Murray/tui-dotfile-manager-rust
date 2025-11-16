@@ -120,6 +120,7 @@ impl App {
     /// * `d` - Start dry run for selected profile
     /// * `p` - Preview diff for selected profile
     /// * `r` - Enter restore mode
+    /// * `R` - Reload configuration file
     ///
     /// # Key Bindings (Restore Mode)
     /// * `Esc` or `b` - Back to sync mode
@@ -159,6 +160,7 @@ impl App {
             KeyCode::Char('s') | KeyCode::Enter => self.start_sync(false),
             KeyCode::Char('p') => self.enter_diff_preview_mode(),
             KeyCode::Char('r') => self.enter_restore_mode(),
+            KeyCode::Char('R') => self.reload_config(),
             _ => {}
         }
     }
