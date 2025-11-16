@@ -337,7 +337,7 @@ cargo fmt
 - [x] Restore from backup functionality in TUI ✅ **Completed**
 - [x] Diff preview before syncing ✅ **Completed**
 - [ ] Configuration reload without restart
-- [ ] Progress indicators for large sync operations
+- [x] Progress indicators for large sync operations ✅ **Completed**
 - [ ] Backup compression
 - [ ] Remote backup storage
 
