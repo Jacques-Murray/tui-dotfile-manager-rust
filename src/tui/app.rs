@@ -120,7 +120,7 @@ impl App {
     /// * `d` - Start dry run for selected profile
     /// * `p` - Preview diff for selected profile
     /// * `r` - Enter restore mode
-    /// * `R` - Reload configuration
+    /// * `R` - Reload configuration file
     ///
     /// # Key Bindings (Restore Mode)
     /// * `Esc` or `b` - Back to sync mode

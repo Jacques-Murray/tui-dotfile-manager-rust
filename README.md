@@ -133,6 +133,7 @@ Once the TUI is running:
 - **`d`** - Dry run (preview changes without applying)
 - **`p`** - Diff preview (view file content differences)
 - **`r`** - Enter restore mode
+- **`R`** - Reload configuration file
 - **`q` / `Esc`** - Quit the application
 
 #### Diff Preview Mode
@@ -336,6 +337,8 @@ cargo fmt
 
 - [x] Restore from backup functionality in TUI ✅ **Completed**
 - [x] Diff preview before syncing ✅ **Completed**
+- [x] Configuration reload without restart ✅ **Completed**
+- [ ] Progress indicators for large sync operations
 - [ ] Configuration reload without restart
 - [x] Progress indicators for large sync operations ✅ **Completed**
 - [ ] Backup compression
