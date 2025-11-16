@@ -66,7 +66,24 @@ fn render_restore_view(f: &mut Frame, app: &App) {
 ///
 /// Displays different content when a sync is in progress.
 fn render_sync_help(f: &mut Frame, app: &App, area: Rect) {
-    let text = if app.sync_in_progress {
+    let text = if let Some(progress) = &app.sync_progress {
+        // Show progress bar and stats
+        let percentage = if progress.total > 0 {
+            (progress.current as f64 / progress.total as f64 * 100.0) as u16
+        } else {
+            0
+        };
+        Line::from(vec![
+            Span::styled(
+                "SYNC: ",
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw(format!("{}/{} ({}%) - ", progress.current, progress.total, percentage)),
+            Span::styled(&progress.current_file, Style::default().fg(Color::Cyan)),
+        ])
+    } else if app.sync_in_progress {
         Line::from(vec![
             Span::styled(
                 "SYNC IN PROGRESS...",
@@ -74,7 +91,7 @@ fn render_sync_help(f: &mut Frame, app: &App, area: Rect) {
                     .fg(Color::Yellow)
                     .add_modifier(Modifier::BOLD),
             ),
-            Span::raw("Please wait."),
+            Span::raw(" Please wait."),
         ])
     } else {
         Line::from(vec![

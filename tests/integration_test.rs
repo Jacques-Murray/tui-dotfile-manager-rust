@@ -748,6 +748,118 @@ links = [
     Ok(())
 }
 
+#[test]
+fn test_sync_with_progress_callback() -> Result<(), Box<dyn std::error::Error>> {
+    // Test that progress callback is invoked correctly during sync
+    let temp = assert_fs::TempDir::new()?;
+    let config_path = temp.child("config.toml");
+    let repo_dir = temp.child("dotfiles");
+    let backup_dir = temp.child("backups");
+    let home_dir = temp.child("home");
+
+    // Create multiple dotfiles
+    repo_dir.child(".bashrc").write_str("REPO BASHRC")?;
+    repo_dir.child(".vimrc").write_str("REPO VIMRC")?;
+    repo_dir.child(".gitconfig").write_str("REPO GITCONFIG")?;
+
+    let config_content = format!(
+        r#"
+[settings]
+repo_dir = "{}"
+backup_dir = "{}"
+
+[profiles.test]
+links = [
+    {{ source = ".bashrc", target = "{}/.bashrc" }},
+    {{ source = ".vimrc", target = "{}/.vimrc" }},
+    {{ source = ".gitconfig", target = "{}/.gitconfig" }}
+]
+"#,
+        repo_dir.path().display(),
+        backup_dir.path().display(),
+        home_dir.path().display(),
+        home_dir.path().display(),
+        home_dir.path().display()
+    );
+    config_path.write_str(&config_content)?;
+
+    let manager = DotfileManager::new(config_path.path())?;
+
+    // Track progress updates
+    use std::sync::{Arc, Mutex};
+    let progress_updates = Arc::new(Mutex::new(Vec::new()));
+    let progress_updates_clone = Arc::clone(&progress_updates);
+
+    // Execute sync with progress callback
+    let _logs = manager.execute_sync_with_progress("test", true, |current, total, file| {
+        let mut updates = progress_updates_clone.lock().unwrap();
+        updates.push((current, total, file.to_string()));
+    })?;
+
+    // Verify progress updates
+    let updates = progress_updates.lock().unwrap();
+    assert_eq!(updates.len(), 3); // Should have 3 updates for 3 files
+
+    // Check first update
+    assert_eq!(updates[0].0, 1); // current
+    assert_eq!(updates[0].1, 3); // total
+    assert!(updates[0].2.contains(".bashrc"));
+
+    // Check second update
+    assert_eq!(updates[1].0, 2);
+    assert_eq!(updates[1].1, 3);
+    assert!(updates[1].2.contains(".vimrc"));
+
+    // Check third update
+    assert_eq!(updates[2].0, 3);
+    assert_eq!(updates[2].1, 3);
+    assert!(updates[2].2.contains(".gitconfig"));
+
+    Ok(())
+}
+
+#[test]
+fn test_get_profile_link_count() -> Result<(), Box<dyn std::error::Error>> {
+    // Test the helper method for getting profile link count
+    let temp = assert_fs::TempDir::new()?;
+    let config_path = temp.child("config.toml");
+    let repo_dir = temp.child("dotfiles");
+    let backup_dir = temp.child("backups");
+
+    let config_content = format!(
+        r#"
+[settings]
+repo_dir = "{}"
+backup_dir = "{}"
+
+[profiles.small]
+links = [
+    {{ source = ".bashrc", target = "~/.bashrc" }}
+]
+
+[profiles.large]
+links = [
+    {{ source = ".bashrc", target = "~/.bashrc" }},
+    {{ source = ".vimrc", target = "~/.vimrc" }},
+    {{ source = ".gitconfig", target = "~/.gitconfig" }},
+    {{ source = ".zshrc", target = "~/.zshrc" }}
+]
+"#,
+        repo_dir.path().display(),
+        backup_dir.path().display()
+    );
+    config_path.write_str(&config_content)?;
+
+    let manager = DotfileManager::new(config_path.path())?;
+
+    // Test profile link counts
+    assert_eq!(manager.get_profile_link_count("small"), 1);
+    assert_eq!(manager.get_profile_link_count("large"), 4);
+    assert_eq!(manager.get_profile_link_count("nonexistent"), 0);
+
+    Ok(())
+}
+
 // ============================================================================
 // Configuration reload tests
 // ============================================================================
