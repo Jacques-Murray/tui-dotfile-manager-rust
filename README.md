@@ -7,8 +7,12 @@ A terminal-based user interface (TUI) application for managing dotfiles using sy
 - 📁 **Profile-based Management** - Organize different sets of dotfiles for different environments (work, personal, etc.)
 - 🔗 **Symlink Creation** - Automatically create symlinks from your dotfile repository to target locations
 - 💾 **Automatic Backups** - Backs up existing files before replacing them with symlinks
-- 🔍 **Dry Run Mode** - Preview changes before applying them
+- 🔄 **Restore from Backups** - Browse, preview, and restore backed-up files directly from the TUI
+- 🔃 **Configuration Reload** - Reload config.toml without restarting the application (press `R`)
+- 🔍 **Dry Run Mode** - Preview changes before applying them (TUI and CLI)
+- 📊 **Diff Preview** - View file content differences before syncing (NEW!)
 - 🎨 **Interactive TUI** - Easy-to-use terminal interface for profile selection and sync operations
+- ⚙️ **CLI Arguments** - Headless mode for automation, custom config paths, and direct profile selection
 - ⚡ **Background Operations** - Non-blocking UI with background sync operations
 - 🪟 **Cross-platform** - Supports both Unix-like systems and Windows
 
@@ -74,27 +78,149 @@ links = [
 
 ## Usage
 
-### Key Bindings
+### Interactive TUI Mode
+
+By default, running the application without arguments launches the interactive TUI:
+
+```bash
+# Launch TUI with default config.toml
+tui-dotfile-manager
+
+# Launch TUI with custom config
+tui-dotfile-manager --config ~/.config/dotfiles/config.toml
+```
+
+### CLI Arguments (Headless Mode)
+
+The application supports command-line arguments for automation and scripting:
+
+```bash
+# List available profiles
+tui-dotfile-manager --list-profiles
+tui-dotfile-manager -l
+
+# Sync a specific profile (headless mode)
+tui-dotfile-manager --profile personal
+tui-dotfile-manager -p work
+
+# Perform a dry run (preview changes without applying)
+tui-dotfile-manager --profile work --dry-run
+tui-dotfile-manager -p personal -d
+
+# Use a custom config file
+tui-dotfile-manager --config ~/.dotfiles/work.toml --profile work
+
+# Combine options
+tui-dotfile-manager -c ~/dotfiles/config.toml -p personal --dry-run
+```
+
+**Available Options:**
+- `-c, --config <PATH>` - Path to configuration file (default: `config.toml`)
+- `-p, --profile <NAME>` - Profile to sync (skips TUI if provided)
+- `-d, --dry-run` - Perform a dry run without making changes
+- `-l, --list-profiles` - List available profiles and exit
+- `-h, --help` - Print help information
+- `-V, --version` - Print version information
+
+### TUI Key Bindings
 
 Once the TUI is running:
 
+#### Sync Mode (default)
 - **`j` / `↓`** - Select next profile
 - **`k` / `↑`** - Select previous profile
 - **`s` / `Enter`** - Sync the selected profile (creates symlinks)
 - **`d`** - Dry run (preview changes without applying)
+- **`p`** - Diff preview (view file content differences)
+- **`r`** - Enter restore mode
 - **`q` / `Esc`** - Quit the application
+
+#### Diff Preview Mode
+- **`j` / `↓`** - Scroll down in the diff view
+- **`k` / `↑`** - Scroll up in the diff view
+- **`n`** - Navigate to next file diff
+- **`N`** - Navigate to previous file diff
+- **`q` / `Esc`** - Exit diff preview mode and return to sync mode
+
+#### Restore Mode
+- **`j` / `↓`** - Select next backup
+- **`k` / `↑`** - Select previous backup
+- **`r` / `Enter`** - Restore the selected backup
+- **`d`** - Dry run restore (preview without applying)
+- **`Delete`** - Delete the selected backup
+- **`b` / `Esc`** - Back to sync mode
 
 ### Workflow
 
+#### Interactive (TUI) Workflow
 1. **Create your config** - Set up `config.toml` with your profiles
 2. **Launch the TUI** - Run the application
 3. **Select a profile** - Use arrow keys or `j/k` to navigate
-4. **Preview changes** - Press `d` for a dry run
+4. **Preview changes** - Press `d` for a dry run or `p` for diff preview
 5. **Apply changes** - Press `s` to sync the selected profile
 6. **Review logs** - Check the log panel for operation details
+7. **Reload config** - Press `R` to reload config.toml after making changes (no restart needed)
+
+#### Diff Preview Workflow (TUI)
+1. **Select a profile** - Navigate to the profile you want to preview
+2. **Enter diff mode** - Press `p` to generate and view diffs
+3. **Review diffs** - See color-coded differences:
+   - Green lines (+) will be added from your dotfiles
+   - Red lines (-) will be removed from existing files
+   - Gray lines are unchanged context
+4. **Navigate** - Use `n`/`N` to switch between different file diffs
+5. **Scroll** - Use `j`/`k` to scroll through long diffs
+6. **Exit** - Press `q` or `Esc` to return to sync mode
+7. **Sync if satisfied** - Return to sync mode and press `s` to apply changes
+
+#### Restore Workflow (TUI)
+1. **Enter restore mode** - Press `r` from the main view
+2. **Browse backups** - Use `j/k` to navigate the backup list
+3. **Preview backup** - View metadata and content preview in the preview panel
+4. **Dry run restore** - Press `d` to preview the restore operation
+5. **Restore backup** - Press `r` or `Enter` to restore the selected backup
+6. **Delete backups** - Press `Delete` to remove old backups
+7. **Return to sync mode** - Press `b` or `Esc`
+
+#### Headless (CLI) Workflow
+1. **Create your config** - Set up configuration file
+2. **List profiles** - Run `tui-dotfile-manager --list-profiles` to see available profiles
+3. **Preview changes** - Run `tui-dotfile-manager -p <profile> --dry-run`
+4. **Apply changes** - Run `tui-dotfile-manager -p <profile>`
+
+### Use Cases
+
+**Automation & Scripting:**
+```bash
+#!/bin/bash
+# Auto-sync work profile on login
+tui-dotfile-manager -c ~/.dotfiles/config.toml -p work
+```
+
+**Multiple Configurations:**
+```bash
+# Switch between different dotfile repos
+tui-dotfile-manager -c ~/.dotfiles/personal.toml -p default
+tui-dotfile-manager -c ~/.dotfiles/work.toml -p corporate
+```
+
+**CI/CD Integration:**
+```bash
+# Test dotfile sync in GitHub Actions
+tui-dotfile-manager --config ./test-config.toml --profile test --dry-run
+```
+
+**Quick Profile Switching (Shell Aliases):**
+```bash
+# Add to your .bashrc or .zshrc
+alias dots-work='tui-dotfile-manager -p work'
+alias dots-personal='tui-dotfile-manager -p personal'
+alias dots-list='tui-dotfile-manager -l'
+```
 
 ## How It Works
 
+### Sync Operation
 1. **Profile Selection**: Choose which set of dotfiles to sync
 2. **Path Resolution**: Expands `~` and resolves relative paths
 3. **Backup Creation**: If a file exists at the target location:
@@ -103,6 +229,31 @@ Once the TUI is running:
    - If it's a regular file/directory, back it up with a timestamp
 4. **Symlink Creation**: Creates symlinks from your repo to target locations
 5. **Logging**: All operations are logged in the TUI
+
+### Diff Preview Operation
+1. **Diff Generation**: For each file in the selected profile:
+   - Compares the source file in your dotfiles repo with the target file (if it exists)
+   - Detects file type (text, binary, symlink, new file)
+2. **Display**: Shows color-coded differences:
+   - **Green (+)**: Lines that will be added from your dotfiles
+   - **Red (-)**: Lines that will be removed from the existing file
+   - **Gray**: Context lines (unchanged)
+3. **Special Cases**:
+   - **New files**: Shows the entire content that will be created
+   - **Binary files**: Shows a message indicating binary content (no diff)
+   - **Existing symlinks**: Shows message if already correctly linked
+   - **Errors**: Displays error messages for unreadable files
+
+### Restore Operation
+1. **Backup Discovery**: Scans the backup directory for backed-up files
+2. **Backup Parsing**: Extracts original filename and timestamp from backup filenames
+3. **Target Resolution**: Matches backups to their original target locations from the config
+4. **Preview**: Shows backup metadata, size, timestamp, and content preview
+5. **Restoration**:
+   - Removes or backs up the current file at the target location
+   - Copies the backup file to the target location
+   - Removes the backup file from the backup directory
+6. **Logging**: All operations are logged in the TUI
 
 ### Backup Format
 
@@ -165,28 +316,30 @@ cargo fmt
 - **anyhow** & **thiserror** - Error handling
 - **chrono** - Timestamp generation
 - **shellexpand** - Path expansion (`~` support)
+- **clap** - Command-line argument parsing
+- **similar** - Text diff generation
 
 ## Safety & Behavior
 
 - **TOCTOU Protection**: Uses metadata checks to avoid race conditions
 - **Backup Safety**: High-precision timestamps (microseconds) prevent overwrites
+- **Backup Before Restore**: Current files are backed up before restoration to prevent data loss
 - **Validation**: Configuration is validated on load
 - **Error Handling**: Graceful error handling with detailed messages
 - **Memory Management**: Log rotation prevents unbounded memory growth
 
 ## Limitations
 
-- Currently looks for `config.toml` in the current directory only
-- No built-in rollback mechanism (backups must be restored manually)
-- No diff preview for file contents
+- Backups are stored locally (no remote backup support)
 
 ## Future Enhancements
 
-- [ ] CLI arguments for config path and profile selection
-- [ ] Restore from backup functionality in TUI
+- [x] Restore from backup functionality in TUI ✅ **Completed**
+- [x] Diff preview before syncing ✅ **Completed**
 - [ ] Configuration reload without restart
 - [ ] Progress indicators for large sync operations
-- [ ] Diff preview before syncing
+- [ ] Backup compression
+- [ ] Remote backup storage
 
 ## License
 

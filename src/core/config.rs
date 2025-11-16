@@ -6,13 +6,13 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 /// The root configuration struct, mapping to the TOML file.
-/// 
+///
 /// # Example TOML
 /// ```toml
 /// [settings]
 /// repo_dir = "dotfiles"
 /// backup_dir = "~/.dotfile_backups"
-/// 
+///
 /// [profiles.personal]
 /// links = [
 ///   { source = ".bashrc", target = "~/.bashrc" },
@@ -31,7 +31,7 @@ impl Config {
         if self.profiles.is_empty() {
             return Err("Configuration must contain at least one profile".to_string());
         }
-        
+
         for (name, profile) in &self.profiles {
             if name.is_empty() {
                 return Err("Profile names cannot be empty".to_string());
@@ -40,13 +40,13 @@ impl Config {
                 return Err(format!("Profile '{}' has no links defined", name));
             }
         }
-        
+
         Ok(())
     }
 }
 
 /// The [settings] section of the config.
-/// 
+///
 /// Contains global settings for the dotfile manager including
 /// the repository directory and backup location.
 #[derive(Debug, Deserialize, Clone)]
@@ -58,7 +58,7 @@ pub struct Settings {
 }
 
 /// A single profile, e.g., [profiles.work]
-/// 
+///
 /// A profile represents a collection of symlink operations that can be
 /// executed together. Useful for maintaining different dotfile sets for
 /// different environments (work, personal, etc.).
@@ -69,7 +69,7 @@ pub struct Profile {
 }
 
 /// A single link task within a profile.
-/// 
+///
 /// Represents a symlink operation from a source file in the repository
 /// to a target location on the filesystem.
 #[derive(Debug, Deserialize, Clone)]
