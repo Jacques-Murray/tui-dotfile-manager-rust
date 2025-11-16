@@ -339,6 +339,8 @@ cargo fmt
 - [x] Diff preview before syncing ✅ **Completed**
 - [x] Configuration reload without restart ✅ **Completed**
 - [ ] Progress indicators for large sync operations
+- [ ] Configuration reload without restart
+- [x] Progress indicators for large sync operations ✅ **Completed**
 - [ ] Backup compression
 - [ ] Remote backup storage
 
